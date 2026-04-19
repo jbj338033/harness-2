@@ -102,7 +102,7 @@ jobs:
           tar -C dist-pkg -czf "${DIST}.tar.gz" "$DIST"
           shasum -a 256 "${DIST}.tar.gz" > "${DIST}.tar.gz.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: harness-${{ matrix.target }}${{ matrix.variant }}
           path: |
