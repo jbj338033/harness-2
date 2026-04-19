@@ -46,23 +46,22 @@ where
                         ingest_usage(&mut usage, u);
                     }
                 }
-                "content_block_start" => {
+                "content_block_start"
                     if json.pointer("/content_block/type").and_then(Value::as_str)
-                        == Some("tool_use")
-                    {
-                        let id = json
-                            .pointer("/content_block/id")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_string();
-                        let name = json
-                            .pointer("/content_block/name")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_string();
-                        active_tool_id = Some(id.clone());
-                        yield Ok(StreamEvent::ToolCallStart { id, name });
-                    }
+                        == Some("tool_use") =>
+                {
+                    let id = json
+                        .pointer("/content_block/id")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    let name = json
+                        .pointer("/content_block/name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    active_tool_id = Some(id.clone());
+                    yield Ok(StreamEvent::ToolCallStart { id, name });
                 }
                 "content_block_delta" => {
                     let delta_type = json

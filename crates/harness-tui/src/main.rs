@@ -301,10 +301,8 @@ fn spawn_input_thread(tx: mpsc::Sender<AppEvent>) {
                 continue;
             }
             match event::read() {
-                Ok(Event::Key(k)) => {
-                    if tx.blocking_send(AppEvent::Key(k)).is_err() {
-                        return;
-                    }
+                Ok(Event::Key(k)) if tx.blocking_send(AppEvent::Key(k)).is_err() => {
+                    return;
                 }
                 Ok(Event::Resize(..)) => {
                     tx.blocking_send(AppEvent::Tick).ok();
