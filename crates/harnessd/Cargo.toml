@@ -9,6 +9,10 @@ authors.workspace = true
 publish.workspace = true
 description = "Harness daemon — the always-on Rust process that hosts agents"
 
+[features]
+default = []
+screen-capture = ["dep:harness-tools-computer"]
+
 [[bin]]
 name = "harnessd"
 path = "src/main.rs"
@@ -36,7 +40,7 @@ harness-tools-shell = { path = "../harness-tools-shell" }
 harness-tools-web = { path = "../harness-tools-web" }
 harness-tools-agent = { path = "../harness-tools-agent" }
 harness-tools-browser = { path = "../harness-tools-browser" }
-harness-tools-computer = { path = "../harness-tools-computer" }
+harness-tools-computer = { path = "../harness-tools-computer", optional = true }
 harness-tools-lsp = { path = "../harness-tools-lsp" }
 harness-tools-skills = { path = "../harness-tools-skills" }
 harness-context = { path = "../harness-context" }

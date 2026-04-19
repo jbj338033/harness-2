@@ -44,6 +44,7 @@ detect_linux_libc() {
   if ldd --version 2>&1 | grep -qi musl; then echo "musl"; else echo "gnu"; fi
 }
 
+VARIANT=""
 case "$OS" in
   Darwin)
     PLATFORM="macos"
@@ -61,6 +62,10 @@ case "$OS" in
       aarch64|arm64)   TARGET="aarch64-unknown-linux-${LIBC}" ;;
       *) echo "unsupported arch on Linux: $ARCH" >&2; exit 1 ;;
     esac
+    if [[ "$TARGET" == "x86_64-unknown-linux-gnu" ]] \
+       && { [[ -n "${WAYLAND_DISPLAY:-}" ]] || [[ -n "${DISPLAY:-}" ]]; }; then
+      VARIANT="-desktop"
+    fi
     ;;
   *) echo "unsupported OS: $OS" >&2; exit 1 ;;
 esac
@@ -96,7 +101,11 @@ if [[ "$FROM_SOURCE" -eq 1 ]]; then
   if [[ "$CLIENT_ONLY" -eq 1 ]]; then
     (cd "$SRC" && cargo build --release -p harness-tui)
   else
-    (cd "$SRC" && cargo build --release -p harnessd -p harness-tui)
+    FEATURE_FLAG=""
+    if [[ "$PLATFORM" == "macos" ]] || [[ -n "$VARIANT" ]]; then
+      FEATURE_FLAG="--features screen-capture"
+    fi
+    (cd "$SRC" && cargo build --release -p harnessd -p harness-tui $FEATURE_FLAG)
   fi
   BIN_DIR="$SRC/target/release"
   SERVICE_DIR="$SRC/dist"
@@ -108,7 +117,7 @@ else
     [[ -n "$VERSION" ]] || { echo "failed to resolve latest release" >&2; exit 1; }
   fi
 
-  ASSET="harness-${VERSION}-${TARGET}.tar.gz"
+  ASSET="harness-${VERSION}-${TARGET}${VARIANT}.tar.gz"
   URL="https://github.com/$REPO/releases/download/$VERSION/$ASSET"
   SUMS_URL="https://github.com/$REPO/releases/download/$VERSION/SHA256SUMS"
 
@@ -128,7 +137,7 @@ else
   fi
 
   tar -xzf "$WORK/$ASSET" -C "$WORK"
-  SRC="$WORK/harness-${VERSION}-${TARGET}"
+  SRC="$WORK/harness-${VERSION}-${TARGET}${VARIANT}"
   BIN_DIR="$SRC"
   SERVICE_DIR="$SRC/service"
 fi

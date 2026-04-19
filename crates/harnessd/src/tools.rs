@@ -3,6 +3,7 @@ use harness_storage::WriterHandle;
 use harness_tools::Registry;
 use harness_tools_agent::AgentTools;
 use harness_tools_browser::BrowserTool;
+#[cfg(feature = "screen-capture")]
 use harness_tools_computer::{ComputerTool, NativeKeyboard, NativePointer, NativeScreen};
 use harness_tools_fs::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 use harness_tools_lsp::{LspPool, LspTool};
@@ -11,7 +12,9 @@ use harness_tools_skills::ActivateSkill;
 use harness_tools_web::WebFetchTool;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::debug;
+#[cfg(feature = "screen-capture")]
+use tracing::warn;
 
 pub struct RegistryInputs {
     pub writer: WriterHandle,
@@ -52,6 +55,7 @@ pub fn build(inputs: RegistryInputs) -> Arc<Registry> {
 
     r.register(Arc::new(LspTool::new(LspPool::new())));
 
+    #[cfg(feature = "screen-capture")]
     match (NativePointer::try_new(), NativeKeyboard::try_new()) {
         (Ok(pointer), Ok(keyboard)) => {
             r.register(Arc::new(ComputerTool::new(

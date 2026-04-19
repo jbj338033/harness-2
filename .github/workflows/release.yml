@@ -19,24 +19,49 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-13
             builder: cargo
+            variant: ""
+            features: screen-capture
           - target: aarch64-apple-darwin
             os: macos-14
             builder: cargo
+            variant: ""
+            features: screen-capture
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             builder: cargo
-          - target: aarch64-unknown-linux-gnu
+            variant: ""
+            features: ""
+          - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            builder: cross
+            builder: cargo
+            variant: "-desktop"
+            features: screen-capture
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             builder: cross
+            variant: ""
+            features: ""
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            builder: cross
+            variant: ""
+            features: ""
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             builder: cross
+            variant: ""
+            features: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: install linux system deps
+        if: runner.os == 'Linux' && matrix.builder == 'cargo' && matrix.features == 'screen-capture'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libwayland-dev libxkbcommon-dev libpipewire-0.3-dev \
+            libdbus-1-dev libudev-dev libgbm-dev libssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -44,7 +69,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ matrix.target }}${{ matrix.variant }}
 
       - name: install cross
         if: matrix.builder == 'cross'
@@ -54,15 +79,21 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           BUILDER: ${{ matrix.builder }}
+          FEATURES: ${{ matrix.features }}
         run: |
-          "$BUILDER" build --release --target "$TARGET" -p harnessd -p harness-tui
+          FEATURE_FLAG=""
+          if [ -n "$FEATURES" ]; then
+            FEATURE_FLAG="--features $FEATURES"
+          fi
+          "$BUILDER" build --release --target "$TARGET" -p harnessd -p harness-tui $FEATURE_FLAG
 
       - name: package
         env:
           TAG: ${{ github.ref_name }}
           TARGET: ${{ matrix.target }}
+          VARIANT: ${{ matrix.variant }}
         run: |
-          DIST="harness-${TAG}-${TARGET}"
+          DIST="harness-${TAG}-${TARGET}${VARIANT}"
           mkdir -p "dist-pkg/$DIST"
           cp "target/${TARGET}/release/harnessd" "dist-pkg/$DIST/"
           cp "target/${TARGET}/release/harness"  "dist-pkg/$DIST/"
@@ -73,7 +104,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: harness-${{ matrix.target }}
+          name: harness-${{ matrix.target }}${{ matrix.variant }}
           path: |
             harness-*.tar.gz
             harness-*.tar.gz.sha256
