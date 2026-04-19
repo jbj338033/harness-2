@@ -1,0 +1,17 @@
+[package]
+name = "harness-tools-code"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Code-aware tools: hashline-addressed edits"
+
+[dependencies]
+harness-tools = { path = "../harness-tools" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

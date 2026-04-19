@@ -1,0 +1,23 @@
+[package]
+name = "harness-worktree"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Git worktree lifecycle for isolated worker agents"
+
+[dependencies]
+harness-core = { path = "../harness-core" }
+
+tokio = { workspace = true, features = ["process", "fs"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

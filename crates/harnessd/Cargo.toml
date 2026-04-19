@@ -1,0 +1,65 @@
+[package]
+name = "harnessd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Harness daemon — the always-on Rust process that hosts agents"
+
+[[bin]]
+name = "harnessd"
+path = "src/main.rs"
+
+[dependencies]
+harness-core = { path = "../harness-core" }
+harness-storage = { path = "../harness-storage" }
+harness-lifecycle = { path = "../harness-lifecycle" }
+harness-proto = { path = "../harness-proto" }
+harness-rpc = { path = "../harness-rpc" }
+harness-transport = { path = "../harness-transport" }
+harness-agent = { path = "../harness-agent" }
+harness-session = { path = "../harness-session" }
+harness-auth = { path = "../harness-auth" }
+harness-llm = { path = "../harness-llm" }
+harness-llm-types = { path = "../harness-llm-types" }
+harness-llm-anthropic = { path = "../harness-llm-anthropic" }
+harness-llm-openai = { path = "../harness-llm-openai" }
+harness-llm-google = { path = "../harness-llm-google" }
+harness-llm-ollama = { path = "../harness-llm-ollama" }
+harness-tools = { path = "../harness-tools" }
+harness-tools-fs = { path = "../harness-tools-fs" }
+harness-tools-code = { path = "../harness-tools-code" }
+harness-tools-shell = { path = "../harness-tools-shell" }
+harness-tools-web = { path = "../harness-tools-web" }
+harness-tools-agent = { path = "../harness-tools-agent" }
+harness-tools-browser = { path = "../harness-tools-browser" }
+harness-tools-computer = { path = "../harness-tools-computer" }
+harness-tools-lsp = { path = "../harness-tools-lsp" }
+harness-tools-skills = { path = "../harness-tools-skills" }
+harness-context = { path = "../harness-context" }
+harness-memory = { path = "../harness-memory" }
+harness-mcp = { path = "../harness-mcp" }
+harness-skills = { path = "../harness-skills" }
+async-trait = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { version = "0.38", features = ["bundled"] }
+
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-stream = "0.3"
+futures = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+wiremock = "0.6"

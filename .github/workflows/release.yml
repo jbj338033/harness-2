@@ -1,0 +1,121 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-13
+            builder: cargo
+          - target: aarch64-apple-darwin
+            os: macos-14
+            builder: cargo
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            builder: cargo
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            builder: cross
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            builder: cross
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            builder: cross
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: install cross
+        if: matrix.builder == 'cross'
+        run: cargo install cross --locked
+
+      - name: build
+        env:
+          TARGET: ${{ matrix.target }}
+          BUILDER: ${{ matrix.builder }}
+        run: |
+          "$BUILDER" build --release --target "$TARGET" -p harnessd -p harness-tui
+
+      - name: package
+        env:
+          TAG: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          DIST="harness-${TAG}-${TARGET}"
+          mkdir -p "dist-pkg/$DIST"
+          cp "target/${TARGET}/release/harnessd" "dist-pkg/$DIST/"
+          cp "target/${TARGET}/release/harness"  "dist-pkg/$DIST/"
+          cp LICENSE README.md "dist-pkg/$DIST/"
+          cp -r dist "dist-pkg/$DIST/service"
+          tar -C dist-pkg -czf "${DIST}.tar.gz" "$DIST"
+          shasum -a 256 "${DIST}.tar.gz" > "${DIST}.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harness-${{ matrix.target }}
+          path: |
+            harness-*.tar.gz
+            harness-*.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: aggregate SHA256SUMS
+        run: |
+          cd artifacts
+          cat harness-*.tar.gz.sha256 > SHA256SUMS
+          rm harness-*.tar.gz.sha256
+
+      - name: extract release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## "v"$" { inside=1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Release $TAG." > RELEASE_NOTES.md
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*.tar.gz
+            artifacts/SHA256SUMS
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false

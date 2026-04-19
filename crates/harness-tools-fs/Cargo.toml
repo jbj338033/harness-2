@@ -1,0 +1,30 @@
+[package]
+name = "harness-tools-fs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Filesystem tools: read, write, edit, glob, grep"
+
+[dependencies]
+harness-core = { path = "../harness-core" }
+harness-tools = { path = "../harness-tools" }
+harness-tools-code = { path = "../harness-tools-code" }
+
+tokio = { workspace = true, features = ["fs"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = "0.1"
+globset = "0.4"
+ignore = "0.4"
+walkdir = "2"
+regex-lite = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

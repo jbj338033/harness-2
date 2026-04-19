@@ -1,0 +1,13 @@
+[Unit]
+Description=harness — personal AI coding daemon
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=__BIN__
+Restart=on-failure
+RestartSec=2
+Environment=HARNESS_LOG=info,harness=debug
+
+[Install]
+WantedBy=default.target

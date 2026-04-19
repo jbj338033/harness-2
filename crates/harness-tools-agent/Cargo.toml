@@ -1,0 +1,29 @@
+[package]
+name = "harness-tools-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "spawn/wait/cancel agent primitives"
+
+[dependencies]
+harness-core = { path = "../harness-core" }
+harness-tools = { path = "../harness-tools" }
+harness-session = { path = "../harness-session" }
+harness-storage = { path = "../harness-storage" }
+
+tokio = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = "0.1"
+rusqlite = { version = "0.38", features = ["bundled"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
