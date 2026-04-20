@@ -71,6 +71,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 anstyle = "1"
 indicatif = "0.18"
+qrcode = { version = "0.14", default-features = false }
 
 # CLI prompts / browser launch (used by `harness auth login`)
 dialoguer = "0.12"

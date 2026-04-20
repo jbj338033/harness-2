@@ -1,5 +1,7 @@
 use crate::style;
 
+const INDENT: &str = "  ";
+
 pub fn print(headers: &[&str], rows: &[Vec<String>]) {
     if headers.is_empty() {
         return;
@@ -16,14 +18,14 @@ pub fn print(headers: &[&str], rows: &[Vec<String>]) {
     for (i, h) in headers.iter().enumerate() {
         write_cell(&mut header_line, h, widths[i], i + 1 < cols);
     }
-    println!("{dim}{header_line}{dim:#}");
+    println!("{INDENT}{dim}{header_line}{dim:#}");
     for row in rows {
         let mut line = String::new();
         for (i, width) in widths.iter().enumerate() {
             let cell = row.get(i).map(String::as_str).unwrap_or("");
             write_cell(&mut line, cell, *width, i + 1 < cols);
         }
-        println!("{line}");
+        println!("{INDENT}{line}");
     }
 }
 

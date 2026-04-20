@@ -73,7 +73,7 @@ async fn api_key_flow(provider: &str, label: &str) -> Result<()> {
         .interact()?;
     let params = build_add_params(provider, "api_key", &key);
     daemon_rpc::call("v1.auth.credentials.add", Some(params)).await?;
-    println!("✓ saved {provider} credential");
+    crate::style::success(format!("stored {provider} credential"));
     Ok(())
 }
 
@@ -88,7 +88,7 @@ async fn ollama_flow() -> Result<()> {
         Some(json!({ "key": "ollama.endpoint", "value": url.trim() })),
     )
     .await?;
-    println!("✓ ollama endpoint set to {}", url.trim());
+    crate::style::success(format!("ollama endpoint set to {}", url.trim()));
     Ok(())
 }
 
@@ -117,10 +117,10 @@ async fn codex_oauth_flow() -> Result<()> {
         Ok(()) => steps.ok(s_browser),
         Err(e) => steps.fail(
             s_browser,
-            &format!("could not launch ({e}) — paste the URL below manually"),
+            &format!("could not launch ({e}) — open the url below manually"),
         ),
     }
-    println!("    {url}");
+    println!("    {}", crate::style::link(&url, &url));
 
     steps.start(s_callback);
     let cb = match rx.await {
@@ -196,7 +196,10 @@ async fn codex_device_code_flow() -> Result<()> {
     steps.ok(s_request);
 
     let minutes = Duration::from_secs(device.expires_in_secs).as_secs() / 60;
-    println!("    open: {}", device.verification_url);
+    println!(
+        "    open: {}",
+        crate::style::link(&device.verification_url, &device.verification_url)
+    );
     println!("    code: {}", device.user_code);
     println!("    (expires in {minutes} minutes)");
 
