@@ -10,8 +10,7 @@ pub struct Steps {
 impl Steps {
     #[must_use]
     pub fn new(header: impl AsRef<str>) -> Self {
-        let bp = style::bold_primary();
-        println!("{bp}◆ {}{bp:#}", header.as_ref());
+        style::section(header.as_ref());
         Self {
             mp: MultiProgress::new(),
             bars: Vec::new(),
@@ -74,18 +73,18 @@ fn active_style() -> ProgressStyle {
     let tmpl = format!("  {primary}{{spinner}}{primary:#} {{msg}}");
     ProgressStyle::with_template(&tmpl)
         .expect("static template")
-        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+        .tick_strings(style::sym_spinner_frames())
 }
 
 fn done_style() -> ProgressStyle {
-    let primary = style::primary();
-    let tmpl = format!("  {primary}✓{primary:#} {{msg}}");
+    let g = style::green();
+    let tmpl = format!("  {g}{sym}{g:#} {{msg}}", sym = style::sym_success());
     ProgressStyle::with_template(&tmpl).expect("static template")
 }
 
 fn failed_style() -> ProgressStyle {
-    let err = style::err();
-    let tmpl = format!("  {err}✗{err:#} {{msg}}");
+    let r = style::err();
+    let tmpl = format!("  {r}{sym}{r:#} {{msg}}", sym = style::sym_failure());
     ProgressStyle::with_template(&tmpl).expect("static template")
 }
 
