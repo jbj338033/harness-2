@@ -65,7 +65,11 @@ mod tests {
 
     #[async_trait]
     impl LlmTitleSource for FakeLlm {
-        async fn suggest(&self, _u: &str, _a: Option<&str>) -> Option<String> {
+        async fn suggest(
+            &self,
+            _user_message: &str,
+            _assistant_reply: Option<&str>,
+        ) -> Option<String> {
             self.0.map(String::from)
         }
     }

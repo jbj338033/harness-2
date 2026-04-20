@@ -254,7 +254,9 @@ mod tests {
 
     impl Capture for FakeScreen {
         fn capture(&self) -> Result<ScreenFrame, String> {
-            let pixels = vec![255u8; (self.w * self.h * 4) as usize];
+            let w = usize::try_from(self.w).expect("fake width fits usize");
+            let h = usize::try_from(self.h).expect("fake height fits usize");
+            let pixels = vec![255u8; w * h * 4];
             Ok(ScreenFrame {
                 width: self.w,
                 height: self.h,
