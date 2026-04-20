@@ -100,7 +100,8 @@ async fn execute_chat_turn(
         &SelectionParams {
             cwd: &session.cwd,
             query: Some(&message),
-            context_window: model_meta.context_window as usize,
+            context_window: usize::try_from(model_meta.context_window)
+                .map_err(|e| rpc_err(ErrorCode::InternalError, e))?,
             budget_bps: 1_000,
         },
     )

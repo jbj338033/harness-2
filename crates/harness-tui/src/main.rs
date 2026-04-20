@@ -190,7 +190,7 @@ async fn main() -> Result<()> {
 }
 
 fn wrapped_height(lines: &[Line<'_>], width: u16) -> u16 {
-    let w = width.max(1) as usize;
+    let w = usize::from(width.max(1));
     let total: usize = lines
         .iter()
         .map(|l| {

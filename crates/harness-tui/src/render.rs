@@ -100,7 +100,7 @@ fn draw_completions(f: &mut Frame, input_area: Rect, app: &App) {
 }
 
 fn input_wrap_rows(input: &str, width: u16) -> u16 {
-    let w = (width as usize).max(1);
+    let w = usize::from(width).max(1);
     let prefix = Span::raw(PROMPT).width();
     let cont = 2usize;
     let mut rows = 0usize;
@@ -124,7 +124,7 @@ fn draw_log(f: &mut Frame, area: Rect, app: &App) {
             lines.push(line);
         }
     }
-    let viewport_rows = area.height as usize;
+    let viewport_rows = usize::from(area.height);
     let scroll = u16::try_from(lines.len().saturating_sub(viewport_rows)).unwrap_or(u16::MAX);
     let para = Paragraph::new(lines)
         .wrap(Wrap { trim: false })
