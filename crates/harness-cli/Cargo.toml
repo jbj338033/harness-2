@@ -37,6 +37,7 @@ open = { workspace = true }
 clap = { workspace = true }
 anstyle = { workspace = true }
 indicatif = { workspace = true }
+qrcode = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
