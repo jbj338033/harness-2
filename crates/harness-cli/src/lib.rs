@@ -390,7 +390,116 @@ async fn cmd_pair() -> Result<()> {
     style::section("Run on the other device");
     let p = style::primary();
     println!("  {p}{connect_cmd}{p:#}");
-    Ok(())
+    println!();
+
+    wait_for_pair(&info.code).await
+}
+
+const PAIR_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+
+async fn wait_for_pair(code: &str) -> Result<()> {
+    use indicatif::{ProgressBar, ProgressStyle};
+    use std::time::{Duration, Instant};
+
+    let pb = ProgressBar::new_spinner();
+    let p = style::primary();
+    let tmpl = format!("  {p}{{spinner}}{p:#} {{msg}}");
+    pb.set_style(
+        ProgressStyle::with_template(&tmpl)
+            .expect("static template")
+            .tick_strings(style::sym_spinner_frames()),
+    );
+    pb.enable_steady_tick(Duration::from_millis(100));
+    let expires_at = Instant::now() + PAIR_TTL;
+    pb.set_message(wait_message(remaining(expires_at)));
+
+    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    tick.tick().await;
+
+    let rpc = daemon_rpc::call_with_timeout(
+        "v1.auth.pair.await",
+        Some(serde_json::json!({ "code": code })),
+        PAIR_TTL + Duration::from_secs(15),
+    );
+    tokio::pin!(rpc);
+
+    let outcome = loop {
+        tokio::select! {
+            biased;
+            _ = tokio::signal::ctrl_c() => break PairResult::UserCancelled,
+            res = &mut rpc => break PairResult::Rpc(res),
+            _ = tick.tick() => {
+                pb.set_message(wait_message(remaining(expires_at)));
+            }
+        }
+    };
+
+    pb.finish_and_clear();
+    match outcome {
+        PairResult::Rpc(Ok(v)) => finish_pair_rpc(&v),
+        PairResult::Rpc(Err(e)) => {
+            style::failure(format!("daemon disconnected: {e}"));
+            Err(e)
+        }
+        PairResult::UserCancelled => {
+            daemon_rpc::call(
+                "v1.auth.pair.cancel",
+                Some(serde_json::json!({ "code": code })),
+            )
+            .await
+            .ok();
+            style::failure("cancelled — code invalidated");
+            bail!("pairing cancelled")
+        }
+    }
+}
+
+enum PairResult {
+    Rpc(Result<serde_json::Value>),
+    UserCancelled,
+}
+
+fn finish_pair_rpc(v: &serde_json::Value) -> Result<()> {
+    let status = v.get("status").and_then(|s| s.as_str()).unwrap_or("");
+    match status {
+        "connected" => {
+            let name = v
+                .get("device_name")
+                .and_then(|s| s.as_str())
+                .unwrap_or("device");
+            let key = v
+                .get("device_public_key")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            style::success("paired");
+            style::kv("device", name, 12);
+            style::kv("key", mask_fingerprint(key), 12);
+            Ok(())
+        }
+        "cancelled" => {
+            style::failure("pairing cancelled on the daemon");
+            bail!("pairing cancelled")
+        }
+        "expired" => {
+            style::failure("pairing code expired");
+            bail!("pairing code expired")
+        }
+        other => {
+            style::failure(format!("daemon returned unknown status: {other}"));
+            bail!("unexpected pair status: {other}")
+        }
+    }
+}
+
+fn remaining(expires_at: std::time::Instant) -> std::time::Duration {
+    expires_at.saturating_duration_since(std::time::Instant::now())
+}
+
+fn wait_message(rem: std::time::Duration) -> String {
+    let total = rem.as_secs();
+    let m = total / 60;
+    let s = total % 60;
+    format!("waiting for a device to connect… ({m}:{s:02} left)")
 }
 
 fn mask_fingerprint(fp: &str) -> String {
