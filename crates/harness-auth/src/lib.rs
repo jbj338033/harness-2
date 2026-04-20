@@ -6,8 +6,8 @@ pub mod pairing;
 pub use challenge::{ChallengeError, Nonce, issue_nonce, verify_signature};
 pub use key::{PrivateKey, PublicKey, SignatureBytes, generate_keypair};
 pub use pairing::{
-    DeviceRecord, PairingError, PairingSession, consume_code, list_devices, register_device,
-    revoke_device,
+    DeviceRecord, Notifier, PairOutcome, PairingError, PairingSession, list_devices,
+    register_device, revoke_device,
 };
 
 use thiserror::Error;

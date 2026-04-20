@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use harness_auth::{
     challenge::{Nonce as AuthNonce, verify_signature},
     key::{PublicKey, SignatureBytes},
-    pairing::{PairingSession, consume_code, register_device},
+    pairing::{PairingSession, register_device},
 };
 use harness_storage::{ReaderPool, WriterHandle};
 use harness_transport::{AuthAttempt, AuthOutcome, Authenticator, Nonce};
@@ -76,16 +76,24 @@ impl Authenticator for DeviceAuthenticator {
                         reason: "signature does not match nonce".into(),
                     };
                 }
-                if let Err(e) = consume_code(&self.pairing, &code) {
-                    debug!(error = %e, "pairing code rejected");
-                    return AuthOutcome::Rejected {
-                        reason: "invalid or expired pairing code".into(),
-                    };
-                }
-                match register_device(&self.writer, name.clone(), pk).await {
-                    Ok(rec) => AuthOutcome::Accepted { device_id: rec.id },
+                let notifier = match self.pairing.consume(&code) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        debug!(error = %e, "pairing code rejected");
+                        return AuthOutcome::Rejected {
+                            reason: "invalid or expired pairing code".into(),
+                        };
+                    }
+                };
+                match register_device(&self.writer, name.clone(), pk.clone()).await {
+                    Ok(rec) => {
+                        let device_id = rec.id.clone();
+                        notifier.fulfill(rec.id, rec.name, pk);
+                        AuthOutcome::Accepted { device_id }
+                    }
                     Err(e) => {
                         warn!(error = %e, %name, "register_device failed");
+                        drop(notifier);
                         AuthOutcome::Rejected {
                             reason: e.to_string(),
                         }
