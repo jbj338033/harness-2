@@ -67,6 +67,11 @@ uuid = { version = "1", features = ["v4", "serde"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 anyhow = "1"
 
+# CLI parsing / styling / progress
+clap = { version = "4", features = ["derive"] }
+anstyle = "1"
+indicatif = "0.18"
+
 # CLI prompts / browser launch (used by `harness auth login`)
 dialoguer = "0.12"
 open = "5"
