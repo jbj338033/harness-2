@@ -16,6 +16,14 @@ pub fn socket_path() -> PathBuf {
 }
 
 pub async fn call(method: &str, params: Option<Value>) -> Result<Value> {
+    call_with_timeout(method, params, Duration::from_secs(10)).await
+}
+
+pub async fn call_with_timeout(
+    method: &str,
+    params: Option<Value>,
+    wait: Duration,
+) -> Result<Value> {
     let path = socket_path();
     let stream = UnixStream::connect(&path)
         .await
@@ -28,9 +36,9 @@ pub async fn call(method: &str, params: Option<Value>) -> Result<Value> {
     w.flush().await?;
 
     let mut lines = BufReader::new(r).lines();
-    let line = timeout(Duration::from_secs(10), lines.next_line())
+    let line = timeout(wait, lines.next_line())
         .await
-        .map_err(|_| anyhow!("daemon did not respond within 10s"))??
+        .map_err(|_| anyhow!("daemon did not respond within {wait:?}"))??
         .ok_or_else(|| anyhow!("daemon closed the socket"))?;
     let resp: Response = serde_json::from_str(&line)?;
     match resp.payload {

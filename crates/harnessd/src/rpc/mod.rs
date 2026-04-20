@@ -34,6 +34,8 @@ pub fn build_router(d: &Arc<Daemon>) -> Router {
         .route("v1.auth.credentials.list", auth::creds_list(d.clone()))
         .route("v1.auth.credentials.delete", auth::creds_delete(d.clone()))
         .route("v1.auth.pair.new", auth::pair_new(d.clone()))
+        .route("v1.auth.pair.await", auth::pair_await(d.clone()))
+        .route("v1.auth.pair.cancel", auth::pair_cancel(d.clone()))
         .route("v1.device.list", device::list(d.clone()))
         .route("v1.device.revoke", device::revoke(d.clone()))
         .route("v1.skill.list", skill::list(d.clone()))

@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
+use tokio::sync::watch;
+use tokio::time::timeout;
 
 pub const DEFAULT_TTL: Duration = Duration::from_secs(300);
 
@@ -21,15 +23,51 @@ pub enum PairingError {
     Storage(#[from] harness_storage::StorageError),
 }
 
+#[derive(Clone, Debug)]
+pub enum PairOutcome {
+    Connected {
+        device_id: String,
+        device_name: String,
+        public_key: PublicKey,
+    },
+    Cancelled,
+}
+
 #[derive(Clone)]
 pub struct PairingSession {
     codes: Arc<Mutex<HashMap<String, Pending>>>,
     ttl: Duration,
 }
 
-#[derive(Clone)]
 struct Pending {
     expires_at: Instant,
+    tx: Option<watch::Sender<Option<PairOutcome>>>,
+    rx: watch::Receiver<Option<PairOutcome>>,
+}
+
+pub struct Notifier {
+    tx: Option<watch::Sender<Option<PairOutcome>>>,
+}
+
+impl Notifier {
+    pub fn fulfill(mut self, device_id: String, device_name: String, public_key: PublicKey) {
+        if let Some(tx) = self.tx.take() {
+            tx.send(Some(PairOutcome::Connected {
+                device_id,
+                device_name,
+                public_key,
+            }))
+            .ok();
+        }
+    }
+}
+
+impl Drop for Notifier {
+    fn drop(&mut self) {
+        if let Some(tx) = self.tx.take() {
+            tx.send(Some(PairOutcome::Cancelled)).ok();
+        }
+    }
 }
 
 impl Default for PairingSession {
@@ -50,23 +88,52 @@ impl PairingSession {
     #[must_use]
     pub fn new_code(&self) -> String {
         let code = random_code();
+        let (tx, rx) = watch::channel(None);
         let mut map = self.codes.lock().expect("mutex poisoned");
         map.insert(
             code.clone(),
             Pending {
                 expires_at: Instant::now() + self.ttl,
+                tx: Some(tx),
+                rx,
             },
         );
         Self::gc(&mut map);
         code
     }
 
-    pub fn consume(&self, code: &str) -> Result<(), PairingError> {
+    pub fn consume(&self, code: &str) -> Result<Notifier, PairingError> {
         let mut map = self.codes.lock().expect("mutex poisoned");
         Self::gc(&mut map);
-        match map.remove(code) {
-            Some(p) if p.expires_at > Instant::now() => Ok(()),
-            _ => Err(PairingError::Invalid),
+        let entry = map.get_mut(code).ok_or(PairingError::Invalid)?;
+        if entry.expires_at <= Instant::now() {
+            return Err(PairingError::Invalid);
+        }
+        let tx = entry.tx.take().ok_or(PairingError::Invalid)?;
+        Ok(Notifier { tx: Some(tx) })
+    }
+
+    pub fn cancel(&self, code: &str) -> bool {
+        self.consume(code).is_ok()
+    }
+
+    pub async fn wait(&self, code: &str) -> Option<PairOutcome> {
+        let (mut rx, remaining) = {
+            let mut map = self.codes.lock().expect("mutex poisoned");
+            Self::gc(&mut map);
+            let entry = map.get(code)?;
+            let remaining = entry.expires_at.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return None;
+            }
+            (entry.rx.clone(), remaining)
+        };
+        if let Some(v) = rx.borrow().clone() {
+            return Some(v);
+        }
+        match timeout(remaining, rx.changed()).await {
+            Ok(Ok(())) => rx.borrow().clone(),
+            _ => None,
         }
     }
 
@@ -94,10 +161,6 @@ fn random_code() -> String {
         out.push(char::from(CHARS[rng.gen_range(0..CHARS.len())]));
     }
     out
-}
-
-pub fn consume_code(session: &PairingSession, code: &str) -> Result<(), PairingError> {
-    session.consume(code)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -226,19 +289,80 @@ mod tests {
     }
 
     #[test]
-    fn consume_invalidates() {
+    fn consume_once_then_invalid() {
         let s = PairingSession::default();
         let code = s.new_code();
-        assert!(s.consume(&code).is_ok());
+        let n = s.consume(&code).expect("first consume");
+        drop(n);
         assert!(matches!(s.consume(&code), Err(PairingError::Invalid)));
     }
 
     #[test]
-    fn expired_code_is_rejected() {
+    fn expired_code_cannot_be_consumed() {
         let s = PairingSession::new(Duration::from_millis(1));
         let code = s.new_code();
         std::thread::sleep(Duration::from_millis(10));
         assert!(matches!(s.consume(&code), Err(PairingError::Invalid)));
+    }
+
+    #[tokio::test]
+    async fn wait_returns_connected_on_fulfill() {
+        let s = PairingSession::default();
+        let code = s.new_code();
+        let (_, pk) = generate_keypair();
+        let notifier = s.consume(&code).unwrap();
+        let waiter = {
+            let s = s.clone();
+            let code = code.clone();
+            tokio::spawn(async move { s.wait(&code).await })
+        };
+        tokio::task::yield_now().await;
+        notifier.fulfill("dev-1".into(), "phone".into(), pk.clone());
+        let out = waiter.await.unwrap();
+        assert!(matches!(
+            out,
+            Some(PairOutcome::Connected { device_name, .. }) if device_name == "phone"
+        ));
+    }
+
+    #[tokio::test]
+    async fn wait_returns_cancelled_when_notifier_dropped() {
+        let s = PairingSession::default();
+        let code = s.new_code();
+        let notifier = s.consume(&code).unwrap();
+        let waiter = {
+            let s = s.clone();
+            let code = code.clone();
+            tokio::spawn(async move { s.wait(&code).await })
+        };
+        tokio::task::yield_now().await;
+        drop(notifier);
+        let out = waiter.await.unwrap();
+        assert!(matches!(out, Some(PairOutcome::Cancelled)));
+    }
+
+    #[tokio::test]
+    async fn cancel_invalidates_and_signals_cancelled() {
+        let s = PairingSession::default();
+        let code = s.new_code();
+        let waiter = {
+            let s = s.clone();
+            let code = code.clone();
+            tokio::spawn(async move { s.wait(&code).await })
+        };
+        tokio::task::yield_now().await;
+        assert!(s.cancel(&code));
+        let out = waiter.await.unwrap();
+        assert!(matches!(out, Some(PairOutcome::Cancelled)));
+        assert!(matches!(s.consume(&code), Err(PairingError::Invalid)));
+    }
+
+    #[tokio::test]
+    async fn wait_times_out_when_expired() {
+        let s = PairingSession::new(Duration::from_millis(30));
+        let code = s.new_code();
+        let out = s.wait(&code).await;
+        assert!(out.is_none());
     }
 
     #[tokio::test]
