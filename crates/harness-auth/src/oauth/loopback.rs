@@ -1,7 +1,9 @@
+use super::openai::REDIRECT_PORT;
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
+
+const CALLBACK_PATH: &str = "/auth/callback";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallbackResult {
@@ -16,15 +18,26 @@ pub enum CallbackResult {
 }
 
 pub async fn spawn_loopback() -> std::io::Result<(
-    SocketAddr,
     tokio::sync::oneshot::Receiver<CallbackResult>,
     tokio::task::JoinHandle<()>,
 )> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
+    let listener = TcpListener::bind(("127.0.0.1", REDIRECT_PORT))
+        .await
+        .map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!(
+                    "could not bind 127.0.0.1:{REDIRECT_PORT} for OAuth callback ({e}). \
+                     stop any other codex/openai cli login session and retry."
+                ),
+            )
+        })?;
     let (tx, rx) = tokio::sync::oneshot::channel();
     let handle = tokio::spawn(async move {
-        if let Ok((mut stream, _)) = listener.accept().await {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
             let mut reader = BufReader::new(&mut stream);
             let mut request_line = String::new();
             reader.read_line(&mut request_line).await.ok();
@@ -37,7 +50,21 @@ pub async fn spawn_loopback() -> std::io::Result<(
             {
                 header.clear();
             }
-            let result = parse_request_line(&request_line);
+
+            let path = path_of(&request_line);
+            if path != CALLBACK_PATH {
+                let body = b"<!doctype html><h1>404</h1>";
+                let resp = format!(
+                    "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                stream.write_all(resp.as_bytes()).await.ok();
+                stream.write_all(body).await.ok();
+                stream.shutdown().await.ok();
+                continue;
+            }
+
+            let result = parse_callback(&request_line);
             let body = match &result {
                 CallbackResult::Ok { .. } => ok_page().to_string(),
                 CallbackResult::Err { error, .. } => err_page(error),
@@ -49,15 +76,21 @@ pub async fn spawn_loopback() -> std::io::Result<(
             );
             stream.write_all(resp.as_bytes()).await.ok();
             stream.shutdown().await.ok();
-            tx.send(result).ok();
+            let _ = tx.send(result);
+            break;
         }
     });
-    Ok((addr, rx, handle))
+    Ok((rx, handle))
 }
 
-fn parse_request_line(line: &str) -> CallbackResult {
-    let path = line.split_whitespace().nth(1).unwrap_or("");
-    let query = path.split_once('?').map_or("", |(_, q)| q);
+fn path_of(request_line: &str) -> &str {
+    let target = request_line.split_whitespace().nth(1).unwrap_or("");
+    target.split_once('?').map_or(target, |(p, _)| p)
+}
+
+fn parse_callback(line: &str) -> CallbackResult {
+    let target = line.split_whitespace().nth(1).unwrap_or("");
+    let query = target.split_once('?').map_or("", |(_, q)| q);
     let params = parse_query(query);
 
     if let Some(error) = params.get("error") {
@@ -147,7 +180,7 @@ mod tests {
 
     #[test]
     fn parses_ok_redirect() {
-        let r = parse_request_line("GET /callback?code=abc123&state=xyz HTTP/1.1");
+        let r = parse_callback("GET /auth/callback?code=abc123&state=xyz HTTP/1.1");
         assert_eq!(
             r,
             CallbackResult::Ok {
@@ -159,8 +192,8 @@ mod tests {
 
     #[test]
     fn parses_error_redirect() {
-        let r = parse_request_line(
-            "GET /callback?error=access_denied&error_description=user%20said%20no HTTP/1.1",
+        let r = parse_callback(
+            "GET /auth/callback?error=access_denied&error_description=user%20said%20no HTTP/1.1",
         );
         match r {
             CallbackResult::Err { error, description } => {
@@ -173,10 +206,20 @@ mod tests {
 
     #[test]
     fn missing_code_is_error() {
-        let r = parse_request_line("GET /callback?state=zzz HTTP/1.1");
+        let r = parse_callback("GET /auth/callback?state=zzz HTTP/1.1");
         match r {
             CallbackResult::Err { error, .. } => assert_eq!(error, "missing_code"),
             CallbackResult::Ok { .. } => panic!("expected Err"),
         }
+    }
+
+    #[test]
+    fn path_extracts_callback() {
+        assert_eq!(
+            path_of("GET /auth/callback?code=x HTTP/1.1"),
+            "/auth/callback"
+        );
+        assert_eq!(path_of("GET / HTTP/1.1"), "/");
+        assert_eq!(path_of(""), "");
     }
 }

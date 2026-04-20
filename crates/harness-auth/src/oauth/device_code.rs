@@ -1,29 +1,56 @@
 use super::TokenBundle;
-use super::openai::{CLIENT_ID, DEVICE_CODE_URL, OAuthError, SCOPES, TOKEN_URL};
+use super::openai::{CLIENT_ID, OAuthError, exchange_code_with_redirect};
 use serde::Deserialize;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, Deserialize)]
+const USERCODE_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/usercode";
+const POLL_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/token";
+const VERIFICATION_URL: &str = "https://auth.openai.com/codex/device";
+const DEVICEAUTH_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
+
+const MAX_WAIT: Duration = Duration::from_secs(15 * 60);
+
+#[derive(Debug, Clone)]
 pub struct DeviceCode {
     pub user_code: String,
-    pub verification_uri: String,
-    #[serde(default)]
-    pub verification_uri_complete: Option<String>,
-    pub device_code: String,
-    #[serde(default = "default_interval")]
-    pub interval: u64,
-    pub expires_in: u64,
+    pub verification_url: String,
+    pub expires_in_secs: u64,
+    device_auth_id: String,
+    interval: u64,
+}
+
+#[derive(Deserialize)]
+struct UserCodeResp {
+    device_auth_id: String,
+    #[serde(alias = "user_code", alias = "usercode")]
+    user_code: String,
+    #[serde(default = "default_interval", deserialize_with = "deserialize_u64")]
+    interval: u64,
 }
 
 fn default_interval() -> u64 {
     5
 }
 
+fn deserialize_u64<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u64, D::Error> {
+    use serde::de::Error;
+    let s = String::deserialize(d)?;
+    s.trim().parse::<u64>().map_err(D::Error::custom)
+}
+
+#[derive(Deserialize)]
+struct PollSuccess {
+    authorization_code: String,
+    code_verifier: String,
+}
+
 pub async fn begin() -> Result<DeviceCode, OAuthError> {
     let client = reqwest::Client::builder().build()?;
+    let body = serde_json::json!({ "client_id": CLIENT_ID });
     let resp = client
-        .post(DEVICE_CODE_URL)
-        .form(&[("client_id", CLIENT_ID), ("scope", SCOPES)])
+        .post(USERCODE_URL)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&body)?)
         .send()
         .await?;
     let status = resp.status();
@@ -35,86 +62,71 @@ pub async fn begin() -> Result<DeviceCode, OAuthError> {
             description: Some(text),
         });
     }
-    Ok(serde_json::from_str(&text)?)
+    let uc: UserCodeResp = serde_json::from_str(&text)?;
+    Ok(DeviceCode {
+        user_code: uc.user_code,
+        device_auth_id: uc.device_auth_id,
+        verification_url: VERIFICATION_URL.to_string(),
+        expires_in_secs: MAX_WAIT.as_secs(),
+        interval: uc.interval.max(1),
+    })
 }
 
 pub async fn poll_until_complete(code: &DeviceCode) -> Result<TokenBundle, OAuthError> {
-    let deadline = std::time::Instant::now() + Duration::from_secs(code.expires_in);
-    let mut interval = Duration::from_secs(code.interval);
     let client = reqwest::Client::builder().build()?;
+    let issued = poll_for_authorization(&client, code).await?;
+    exchange_code_with_redirect(
+        &issued.authorization_code,
+        &issued.code_verifier,
+        DEVICEAUTH_REDIRECT_URI,
+    )
+    .await
+}
+
+async fn poll_for_authorization(
+    client: &reqwest::Client,
+    code: &DeviceCode,
+) -> Result<PollSuccess, OAuthError> {
+    let body = serde_json::json!({
+        "device_auth_id": code.device_auth_id,
+        "user_code": code.user_code,
+    });
+    let body = serde_json::to_string(&body)?;
+    let mut interval = Duration::from_secs(code.interval);
+    let start = Instant::now();
 
     loop {
-        if std::time::Instant::now() >= deadline {
+        if start.elapsed() >= MAX_WAIT {
             return Err(OAuthError::TokenEndpoint {
                 status: 0,
                 code: "expired_token".into(),
-                description: Some(
-                    "device authorization expired — run `harness auth login openai --device-auth` again"
-                        .into(),
-                ),
+                description: Some("device authorization timed out after 15 minutes".into()),
             });
         }
-        tokio::time::sleep(interval).await;
-
         let resp = client
-            .post(TOKEN_URL)
-            .form(&[
-                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-                ("device_code", code.device_code.as_str()),
-                ("client_id", CLIENT_ID),
-            ])
+            .post(POLL_URL)
+            .header("Content-Type", "application/json")
+            .body(body.clone())
             .send()
             .await?;
         let status = resp.status();
-        let text = resp.text().await?;
-
         if status.is_success() {
-            let body: TokenResponse = serde_json::from_str(&text)?;
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
-                .unwrap_or_default();
-            return Ok(TokenBundle {
-                access_token: body.access_token,
-                refresh_token: body.refresh_token.unwrap_or_default(),
-                expires_at: now + i64::from(body.expires_in),
-                id_token: body.id_token,
-            });
+            let text = resp.text().await?;
+            return Ok(serde_json::from_str(&text)?);
         }
-
-        let err: TokenError = serde_json::from_str(&text).unwrap_or(TokenError {
-            error: "unknown".into(),
-            error_description: Some(text.clone()),
+        if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::NOT_FOUND {
+            let sleep_for = interval.min(MAX_WAIT.saturating_sub(start.elapsed()));
+            tokio::time::sleep(sleep_for).await;
+            interval = (interval + Duration::from_millis(250)).min(Duration::from_secs(15));
+            continue;
+        }
+        let text = resp.text().await?;
+        return Err(OAuthError::TokenEndpoint {
+            status: status.as_u16(),
+            code: "device_code_poll".into(),
+            description: Some(text),
         });
-        match err.error.as_str() {
-            "authorization_pending" => {}
-            "slow_down" => interval += Duration::from_secs(5),
-            _ => {
-                return Err(OAuthError::TokenEndpoint {
-                    status: status.as_u16(),
-                    code: err.error,
-                    description: err.error_description,
-                });
-            }
-        }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenResponse {
-    access_token: String,
-    #[serde(default)]
-    refresh_token: Option<String>,
-    expires_in: u32,
-    #[serde(default)]
-    id_token: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenError {
-    error: String,
-    #[serde(default)]
-    error_description: Option<String>,
 }
 
 #[cfg(test)]
@@ -122,16 +134,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn device_code_deserializes_with_defaults() {
-        let src = r#"{
-            "user_code": "ABCD-EFGH",
-            "verification_uri": "https://auth.openai.com/activate",
-            "device_code": "dc_abc",
-            "expires_in": 900
-        }"#;
-        let dc: DeviceCode = serde_json::from_str(src).unwrap();
-        assert_eq!(dc.user_code, "ABCD-EFGH");
-        assert_eq!(dc.interval, 5);
-        assert_eq!(dc.expires_in, 900);
+    fn user_code_resp_deserializes_with_int_interval() {
+        let raw = r#"{ "device_auth_id": "did", "user_code": "ABCD-1234", "interval": "5" }"#;
+        let r: UserCodeResp = serde_json::from_str(raw).unwrap();
+        assert_eq!(r.user_code, "ABCD-1234");
+        assert_eq!(r.interval, 5);
+    }
+
+    #[test]
+    fn user_code_resp_alias_usercode() {
+        let raw = r#"{ "device_auth_id": "did", "usercode": "X-Y-Z" }"#;
+        let r: UserCodeResp = serde_json::from_str(raw).unwrap();
+        assert_eq!(r.user_code, "X-Y-Z");
+        assert_eq!(r.interval, 5);
     }
 }
