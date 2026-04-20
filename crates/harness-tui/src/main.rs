@@ -57,87 +57,23 @@ enum StartupAction {
     Resume(Option<String>),
 }
 
-enum ArgOutcome {
-    Tui(StartupAction),
-    Subcommand(Vec<String>),
-}
-
-fn parse_args() -> ArgOutcome {
-    if let Some(first) = std::env::args().nth(1)
-        && harness_cli::is_subcommand(&first)
-    {
-        let cli_args: Vec<String> = std::env::args().skip(1).collect();
-        return ArgOutcome::Subcommand(cli_args);
+fn startup_from(flags: &harness_cli::SessionFlags) -> StartupAction {
+    if flags.continue_session {
+        return StartupAction::Continue;
     }
-
-    let mut args = std::env::args().skip(1).peekable();
-    let mut action = StartupAction::New;
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "-h" | "--help" => {
-                print_usage();
-                std::process::exit(0);
-            }
-            "-V" | "--version" => {
-                println!("harness {VERSION}");
-                std::process::exit(0);
-            }
-            "-c" | "--continue" => action = StartupAction::Continue,
-            "-r" | "--resume" => {
-                let id = args
-                    .peek()
-                    .filter(|a| !a.starts_with('-'))
-                    .cloned()
-                    .inspect(|_v| {
-                        args.next();
-                    });
-                action = StartupAction::Resume(id);
-            }
-            other => {
-                eprintln!("harness: unknown argument `{other}`");
-                print_usage();
-                std::process::exit(2);
-            }
-        }
+    match &flags.resume {
+        Some(id) => StartupAction::Resume(id.clone()),
+        None => StartupAction::New,
     }
-    ArgOutcome::Tui(action)
-}
-
-fn print_usage() {
-    println!(
-        "harness {VERSION}\n\
-         \n\
-         Usage:\n\
-         \x20\x20harness                      open the TUI\n\
-         \x20\x20harness [SESSION-FLAG]       open the TUI resuming a session\n\
-         \x20\x20harness <SUBCOMMAND> [...]   run a CLI subcommand\n\
-         \n\
-         Session flags (TUI):\n\
-         \x20\x20-c, --continue         resume cwd's latest session\n\
-         \x20\x20-r, --resume [ID]      resume session ID (picker when omitted)\n\
-         \n\
-         Subcommands:\n\
-         \x20\x20auth login|add|list|remove  manage provider credentials\n\
-         \x20\x20model list|use|current      inspect or set the default model\n\
-         \x20\x20skill list|info             browse discovered Agent Skills\n\
-         \x20\x20mcp list|add|remove         register MCP servers\n\
-         \x20\x20config get|set|unset|list   manage daemon config\n\
-         \x20\x20device list|revoke          manage paired devices\n\
-         \x20\x20pair / connect              pair devices\n\
-         \x20\x20doctor                      end-to-end health check\n\
-         \x20\x20setup                       interactive first-run setup\n\
-         \x20\x20status                      daemon + device summary\n\
-         \n\
-         Run `harness <subcommand> --help` for sub-verb details."
-    );
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let startup = match parse_args() {
-        ArgOutcome::Tui(s) => s,
-        ArgOutcome::Subcommand(args) => return harness_cli::run(args).await,
-    };
+    let cli = harness_cli::parse();
+    if cli.command.is_some() {
+        return harness_cli::run(cli).await;
+    }
+    let startup = startup_from(&cli.session);
 
     if std::env::var_os("NO_COLOR").is_some() {
         app::disable_color();

@@ -1,13 +1,14 @@
 use anyhow::{Result, anyhow, bail};
-use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Password, Select};
 use harness_auth::oauth::{
     CallbackResult, TokenBundle, authorize_url, begin_device_code, exchange_code, gen_pkce,
     poll_until_complete, spawn_loopback,
 };
 use serde_json::{Value, json};
+use std::time::Duration;
 
 use crate::daemon_rpc;
+use crate::progress::Steps;
 
 const PROVIDERS: &[&str] = &[
     "Anthropic   API key (Claude)",
@@ -27,7 +28,7 @@ fn provider_default_index(preselected: Option<&str>) -> usize {
 }
 
 pub async fn run(preselected: Option<&str>) -> Result<()> {
-    let theme = ColorfulTheme::default();
+    let theme = crate::style::dialoguer_theme();
     let pick = Select::with_theme(&theme)
         .with_prompt("where do your models come from?")
         .items(PROVIDERS)
@@ -46,7 +47,7 @@ pub async fn run(preselected: Option<&str>) -> Result<()> {
 }
 
 async fn openai_flow() -> Result<()> {
-    let theme = ColorfulTheme::default();
+    let theme = crate::style::dialoguer_theme();
     let pick = Select::with_theme(&theme)
         .with_prompt("OpenAI sign-in method")
         .items([
@@ -65,7 +66,7 @@ async fn openai_flow() -> Result<()> {
 }
 
 async fn api_key_flow(provider: &str, label: &str) -> Result<()> {
-    let theme = ColorfulTheme::default();
+    let theme = crate::style::dialoguer_theme();
     let key: String = Password::with_theme(&theme)
         .with_prompt(format!("{label} API key"))
         .allow_empty_password(false)
@@ -77,7 +78,7 @@ async fn api_key_flow(provider: &str, label: &str) -> Result<()> {
 }
 
 async fn ollama_flow() -> Result<()> {
-    let theme = ColorfulTheme::default();
+    let theme = crate::style::dialoguer_theme();
     let url: String = Input::with_theme(&theme)
         .with_prompt("Ollama endpoint")
         .with_initial_text("http://localhost:11434")
@@ -92,72 +93,124 @@ async fn ollama_flow() -> Result<()> {
 }
 
 async fn codex_oauth_flow() -> Result<()> {
+    let mut steps = Steps::new("ChatGPT sign-in (browser)");
+    let s_listen = steps.add("listen on localhost:1455");
+    let s_browser = steps.add("open browser");
+    let s_callback = steps.add("wait for browser callback");
+    let s_exchange = steps.add("exchange token");
+    let s_store = steps.add("store credential");
+
+    steps.start(s_listen);
     let pkce = gen_pkce();
-    let (addr, rx, _server) = spawn_loopback().await?;
-    let redirect = format!("http://127.0.0.1:{}/callback", addr.port());
-    let url = authorize_url(&pkce, &redirect);
+    let (rx, _server) = match spawn_loopback().await {
+        Ok(v) => v,
+        Err(e) => {
+            steps.fail(s_listen, &e.to_string());
+            return Err(e.into());
+        }
+    };
+    let url = authorize_url(&pkce);
+    steps.ok(s_listen);
 
-    println!("opening browser for ChatGPT sign-in:");
-    println!("  {url}");
-    if let Err(e) = open::that(&url) {
-        eprintln!("could not launch browser ({e}) — paste the URL above manually");
+    steps.start(s_browser);
+    match open::that(&url) {
+        Ok(()) => steps.ok(s_browser),
+        Err(e) => steps.fail(
+            s_browser,
+            &format!("could not launch ({e}) — paste the URL below manually"),
+        ),
     }
-    println!("waiting for the browser callback...");
+    println!("    {url}");
 
-    let cb = rx
-        .await
-        .map_err(|_| anyhow!("loopback callback channel closed before redirect"))?;
+    steps.start(s_callback);
+    let cb = match rx.await {
+        Ok(v) => v,
+        Err(_) => {
+            let msg = "loopback callback channel closed before redirect";
+            steps.fail(s_callback, msg);
+            bail!(msg);
+        }
+    };
     let (code, state) = match cb {
         CallbackResult::Ok { code, state } => (code, state),
         CallbackResult::Err { error, description } => {
-            bail!(
+            let msg = format!(
                 "openai oauth declined: {error}{}",
                 description.map(|d| format!(" — {d}")).unwrap_or_default()
             );
+            steps.fail(s_callback, &msg);
+            bail!(msg);
         }
     };
     if state != pkce.state {
-        bail!("openai oauth: state mismatch (possible csrf, refusing)");
+        let msg = "state mismatch (possible csrf, refusing)";
+        steps.fail(s_callback, msg);
+        bail!("openai oauth: {msg}");
     }
-    let bundle: TokenBundle = exchange_code(&code, &pkce.verifier, &redirect)
-        .await
-        .map_err(|e| anyhow!("token exchange failed: {e}"))?;
+    steps.ok(s_callback);
 
+    steps.start(s_exchange);
+    let bundle: TokenBundle = match exchange_code(&code, &pkce.verifier).await {
+        Ok(b) => b,
+        Err(e) => {
+            steps.fail(s_exchange, &e.to_string());
+            bail!("token exchange failed: {e}");
+        }
+    };
+    steps.ok(s_exchange);
+
+    save_oauth_credential(&mut steps, s_store, &bundle).await
+}
+
+async fn save_oauth_credential(
+    steps: &mut Steps,
+    s_store: usize,
+    bundle: &TokenBundle,
+) -> Result<()> {
+    steps.start(s_store);
     let value =
-        serde_json::to_string(&bundle).map_err(|e| anyhow!("serialize token bundle: {e}"))?;
+        serde_json::to_string(bundle).map_err(|e| anyhow!("serialize token bundle: {e}"))?;
     let params = build_add_params("openai", "oauth", &value);
-    daemon_rpc::call("v1.auth.credentials.add", Some(params)).await?;
-    println!("✓ saved openai oauth credential");
+    if let Err(e) = daemon_rpc::call("v1.auth.credentials.add", Some(params)).await {
+        steps.fail(s_store, &e.to_string());
+        return Err(e);
+    }
+    steps.ok_message(s_store, "stored openai oauth credential");
     Ok(())
 }
 
 async fn codex_device_code_flow() -> Result<()> {
-    let device = begin_device_code()
-        .await
-        .map_err(|e| anyhow!("device code request failed: {e}"))?;
-    println!("\nopen this URL on any device with a browser:");
-    println!(
-        "  {}",
-        device
-            .verification_uri_complete
-            .as_deref()
-            .unwrap_or(device.verification_uri.as_str())
-    );
-    println!("then enter this code if asked: {}\n", device.user_code);
-    println!(
-        "(this code expires in {} minutes; harness will keep polling)",
-        device.expires_in / 60
-    );
+    let mut steps = Steps::new("ChatGPT sign-in (device code)");
+    let s_request = steps.add("request device code");
+    let s_poll = steps.add("wait for sign-in");
+    let s_store = steps.add("store credential");
 
-    let bundle: TokenBundle = poll_until_complete(&device)
-        .await
-        .map_err(|e| anyhow!("device-code poll failed: {e}"))?;
-    let value =
-        serde_json::to_string(&bundle).map_err(|e| anyhow!("serialize token bundle: {e}"))?;
-    let params = build_add_params("openai", "oauth", &value);
-    daemon_rpc::call("v1.auth.credentials.add", Some(params)).await?;
-    println!("✓ saved openai oauth credential");
-    Ok(())
+    steps.start(s_request);
+    let device = match begin_device_code().await {
+        Ok(d) => d,
+        Err(e) => {
+            steps.fail(s_request, &e.to_string());
+            bail!("device code request failed: {e}");
+        }
+    };
+    steps.ok(s_request);
+
+    let minutes = Duration::from_secs(device.expires_in_secs).as_secs() / 60;
+    println!("    open: {}", device.verification_url);
+    println!("    code: {}", device.user_code);
+    println!("    (expires in {minutes} minutes)");
+
+    steps.start(s_poll);
+    let bundle: TokenBundle = match poll_until_complete(&device).await {
+        Ok(b) => b,
+        Err(e) => {
+            steps.fail(s_poll, &e.to_string());
+            bail!("device-code poll failed: {e}");
+        }
+    };
+    steps.ok(s_poll);
+
+    save_oauth_credential(&mut steps, s_store, &bundle).await
 }
 
 #[must_use]

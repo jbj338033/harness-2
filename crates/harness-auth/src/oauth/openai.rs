@@ -2,18 +2,20 @@ use super::pkce::Pkce;
 use serde::{Deserialize, Serialize};
 
 pub const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
-
+pub const ISSUER: &str = "https://auth.openai.com";
 pub const AUTHORIZE_URL: &str = "https://auth.openai.com/oauth/authorize";
-
 pub const TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
-
-pub const DEVICE_CODE_URL: &str = "https://auth.openai.com/oauth/device/code";
-
 pub const REVOKE_URL: &str = "https://auth.openai.com/oauth/revoke";
+
+pub const REDIRECT_PORT: u16 = 1455;
+pub const REDIRECT_URI: &str = "http://localhost:1455/auth/callback";
 
 pub const CHATGPT_API_BASE: &str = "https://chatgpt.com/backend-api";
 
-pub const SCOPES: &str = "openid profile email offline_access";
+pub const SCOPES: &str =
+    "openid profile email offline_access api.connectors.read api.connectors.invoke";
+
+pub const ORIGINATOR: &str = "codex_cli_rs";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TokenBundle {
@@ -32,15 +34,18 @@ impl TokenBundle {
 }
 
 #[must_use]
-pub fn authorize_url(pkce: &Pkce, redirect_uri: &str) -> String {
+pub fn authorize_url(pkce: &Pkce) -> String {
     let q = [
         ("response_type", "code"),
         ("client_id", CLIENT_ID),
-        ("redirect_uri", redirect_uri),
+        ("redirect_uri", REDIRECT_URI),
+        ("scope", SCOPES),
         ("code_challenge", pkce.challenge.as_str()),
         ("code_challenge_method", "S256"),
+        ("id_token_add_organizations", "true"),
+        ("codex_cli_simplified_flow", "true"),
         ("state", pkce.state.as_str()),
-        ("scope", SCOPES),
+        ("originator", ORIGINATOR),
     ];
     let mut url = AUTHORIZE_URL.to_string();
     url.push('?');
@@ -55,28 +60,39 @@ pub fn authorize_url(pkce: &Pkce, redirect_uri: &str) -> String {
     url
 }
 
-pub async fn exchange_code(
+pub async fn exchange_code(code: &str, pkce_verifier: &str) -> Result<TokenBundle, OAuthError> {
+    token_post(&[
+        ("grant_type", "authorization_code"),
+        ("code", code),
+        ("code_verifier", pkce_verifier),
+        ("client_id", CLIENT_ID),
+        ("redirect_uri", REDIRECT_URI),
+    ])
+    .await
+}
+
+pub async fn exchange_code_with_redirect(
     code: &str,
     pkce_verifier: &str,
     redirect_uri: &str,
 ) -> Result<TokenBundle, OAuthError> {
-    let params = [
+    token_post(&[
         ("grant_type", "authorization_code"),
         ("code", code),
         ("code_verifier", pkce_verifier),
         ("client_id", CLIENT_ID),
         ("redirect_uri", redirect_uri),
-    ];
-    token_post(&params).await
+    ])
+    .await
 }
 
 pub async fn refresh_access_token(refresh_token: &str) -> Result<TokenBundle, OAuthError> {
-    let params = [
+    token_post(&[
         ("grant_type", "refresh_token"),
         ("refresh_token", refresh_token),
         ("client_id", CLIENT_ID),
-    ];
-    token_post(&params).await
+    ])
+    .await
 }
 
 pub async fn revoke(token: &str) -> Result<(), reqwest::Error> {
@@ -172,20 +188,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn authorize_url_contains_expected_params() {
+    fn authorize_url_carries_required_params() {
         let pkce = Pkce {
             verifier: "v".into(),
             challenge: "c".into(),
             state: "s".into(),
         };
-        let u = authorize_url(&pkce, "http://localhost:12345/callback");
+        let u = authorize_url(&pkce);
         assert!(u.starts_with(AUTHORIZE_URL));
         assert!(u.contains("client_id=app_EMoamEEZ73f0CkXaXp7hrann"));
+        assert!(u.contains("redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"));
         assert!(u.contains("code_challenge=c"));
         assert!(u.contains("code_challenge_method=S256"));
         assert!(u.contains("state=s"));
         assert!(u.contains("response_type=code"));
-        assert!(u.contains("redirect_uri=http%3A%2F%2Flocalhost%3A12345%2Fcallback"));
+        assert!(u.contains("id_token_add_organizations=true"));
+        assert!(u.contains("codex_cli_simplified_flow=true"));
+        assert!(u.contains("originator=codex_cli_rs"));
+        assert!(u.contains("api.connectors.read"));
+        assert!(u.contains("api.connectors.invoke"));
     }
 
     #[test]
