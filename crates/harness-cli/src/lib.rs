@@ -18,8 +18,18 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Parser, Debug)]
 #[command(
     name = "harness",
+    bin_name = "harness",
     version,
     about = "persistent, multi-agent AI coding daemon",
+    long_about = "harness is a persistent, multi-agent AI coding daemon.\n\
+                  Run `harness` with no command to attach to a running daemon (tui).\n\
+                  Use subcommands to manage credentials, devices, and configuration.",
+    override_usage = "harness [options]\n       harness [options] <command>",
+    after_help = "Examples:\n  \
+                  harness                attach to running daemon (tui)\n  \
+                  harness setup          first-run setup\n  \
+                  harness auth login     sign in a provider\n  \
+                  harness pair           issue a pairing code",
     arg_required_else_help = false,
     args_conflicts_with_subcommands = true,
     styles = style::clap_styles(),
@@ -38,7 +48,7 @@ pub struct SessionFlags {
     #[arg(short = 'c', long = "continue")]
     pub continue_session: bool,
 
-    /// resume session by ID; omit to pick interactively
+    /// resume session by id; omit to pick interactively
     #[arg(short = 'r', long = "resume", value_name = "ID", num_args = 0..=1)]
     pub resume: Option<Option<String>>,
 }
@@ -47,7 +57,7 @@ pub struct SessionFlags {
 pub enum Command {
     /// interactive first-run setup
     Setup,
-    /// daemon + paired devices summary
+    /// daemon and devices summary
     Status,
     /// end-to-end health check
     Doctor,
@@ -95,9 +105,9 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthCmd {
-    /// inline picker — API key or Codex OAuth
+    /// inline picker — api key or Codex OAuth
     Login { provider: Option<String> },
-    /// store a provider API key (non-interactive)
+    /// store a provider api key (non-interactive)
     Add {
         provider: String,
         key: String,
@@ -214,9 +224,13 @@ const SETUP_PROVIDERS: &[&str] = &["anthropic", "openai", "google", "ollama"];
 
 async fn cmd_setup() -> Result<()> {
     let theme = style::dialoguer_theme();
-    println!("harness setup — {VERSION}\n");
+    style::section(&format!("harness setup {VERSION}"));
+    println!();
     let (dd, _db, writer) = open_db()?;
-    println!("data directory: {}\n", dd.root.display());
+    let home = std::env::var("HOME").unwrap_or_default();
+    let display_path = dd.root.display().to_string().replacen(&home, "~", 1);
+    style::kv("data dir", display_path, 12);
+    println!();
 
     loop {
         let add = Confirm::with_theme(&theme)
@@ -227,7 +241,7 @@ async fn cmd_setup() -> Result<()> {
             break;
         }
         let idx = Select::with_theme(&theme)
-            .with_prompt("provider")
+            .with_prompt("Provider")
             .items(SETUP_PROVIDERS)
             .default(0)
             .interact()?;
@@ -237,36 +251,33 @@ async fn cmd_setup() -> Result<()> {
             .allow_empty_password(false)
             .interact()?;
         let label: String = Input::with_theme(&theme)
-            .with_prompt("label")
+            .with_prompt("Label")
             .default("personal".to_string())
             .interact_text()?;
         add_credential(&writer, provider, &key, Some(&label)).await?;
-        println!("  ✓ stored {provider} credential '{label}'\n");
+        println!();
+        style::success(format!("stored {provider} credential ({label})"));
+        println!();
     }
 
     let pair_now = Confirm::with_theme(&theme)
-        .with_prompt("Pair a remote device now?")
+        .with_prompt("Pair a remote device?")
         .default(false)
         .interact()?;
     if pair_now {
+        println!();
         match issue_pairing_code().await {
             Ok(info) => {
+                let p = style::primary();
                 println!(
-                    "\npairing code: {}\n  port: {}\n  fingerprint: {}\n",
-                    info.code, info.port, info.fingerprint
-                );
-                println!(
-                    "Run on the other device:\n    \
-                     harness connect wss://<host>:{port} {code} <device-name>\n",
+                    "  {p}harness connect wss://<host>:{port} {code} <name>{p:#}",
                     port = info.port,
                     code = info.code
                 );
             }
-            Err(e) => eprintln!("could not reach daemon for pairing: {e}"),
+            Err(e) => style::failure(format!("could not reach daemon: {e}")),
         }
     }
-
-    println!("\nsetup complete. Run `harness` to start the TUI or `harness status`.");
     Ok(())
 }
 
@@ -301,7 +312,7 @@ async fn issue_pairing_code() -> Result<PairingCodeInfo> {
 }
 
 fn cmd_status() -> Result<()> {
-    let (dd, db, _writer) = open_db()?;
+    let (dd, _db, _writer) = open_db()?;
     let reg = ModelRegistry::with_builtins();
     let reader = rusqlite::Connection::open(dd.db_path()).context("open reader")?;
 
@@ -310,32 +321,105 @@ fn cmd_status() -> Result<()> {
         .unwrap_or(0);
 
     let devices = pairing::list_devices(&reader).unwrap_or_default();
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dir_disp = dd.root.display().to_string().replacen(&home, "~", 1);
 
-    println!("harness {VERSION}");
-    println!("data dir:      {}", dd.root.display());
-    println!("database:      {}", db.path);
-    println!("models:        {}", reg.len());
-    println!("credentials:   {cred_count}");
-    println!("devices:       {}", devices.len());
-    for d in devices {
-        println!("  - {} ({})", d.name, d.id);
+    style::section(&format!("harness {VERSION}"));
+    println!();
+    style::kv("data dir", dir_disp, 12);
+    style::kv("models", reg.len(), 12);
+    style::kv("credentials", cred_count, 12);
+    style::kv("devices", devices.len(), 12);
+
+    if !devices.is_empty() {
+        println!();
+        style::section("Devices");
+        let max_name = devices
+            .iter()
+            .map(|d| d.name.chars().count())
+            .max()
+            .unwrap_or(0);
+        let p = style::primary();
+        for d in &devices {
+            let pad = max_name.saturating_sub(d.name.chars().count());
+            let key = fingerprint_short(&d.public_key.0);
+            println!(
+                "  {name}{padding}  {p}{key}{p:#}",
+                name = d.name,
+                padding = " ".repeat(pad),
+            );
+        }
     }
     Ok(())
 }
 
+fn fingerprint_short(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::with_capacity(13);
+    for b in bytes.iter().take(6) {
+        write!(s, "{b:02x}").unwrap();
+    }
+    s.push('…');
+    s
+}
+
 async fn cmd_pair() -> Result<()> {
     let info = issue_pairing_code().await?;
-    println!("pairing code:  {}", info.code);
-    println!("fingerprint:   {}", info.fingerprint);
-    println!("port:          {}", info.port);
+    style::section("harness pair");
     println!();
-    println!(
-        "Run on the other device:\n    \
-         harness connect wss://<host>:{port} {code} <device-name>\n",
+    style::kv("code", &info.code, 12);
+    style::kv("fingerprint", mask_fingerprint(&info.fingerprint), 12);
+    style::kv("port", info.port, 12);
+
+    let connect_cmd = format!(
+        "harness connect wss://<host>:{port} {code} <name>",
         port = info.port,
-        code = info.code,
+        code = info.code
     );
+
+    if style::supports_unicode() {
+        println!();
+        style::section("QR");
+        let qr = render_qr(&connect_cmd);
+        for line in qr.lines() {
+            println!("  {line}");
+        }
+    }
+
+    println!();
+    style::section("Run on the other device");
+    let p = style::primary();
+    println!("  {p}{connect_cmd}{p:#}");
     Ok(())
+}
+
+fn mask_fingerprint(fp: &str) -> String {
+    let chars: Vec<char> = fp.chars().collect();
+    if chars.len() <= 14 {
+        return fp.to_string();
+    }
+    let head: String = chars.iter().take(6).collect();
+    let tail: String = chars
+        .iter()
+        .rev()
+        .take(6)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    format!("{head}…{tail}")
+}
+
+fn render_qr(payload: &str) -> String {
+    use qrcode::QrCode;
+    use qrcode::render::unicode::Dense1x2;
+    let Ok(code) = QrCode::new(payload.as_bytes()) else {
+        return String::new();
+    };
+    code.render::<Dense1x2>()
+        .dark_color(Dense1x2::Dark)
+        .light_color(Dense1x2::Light)
+        .build()
 }
 
 async fn cmd_connect(
@@ -365,7 +449,8 @@ async fn cmd_connect(
         s_pair,
         format!(
             "paired — device {}  fp {}",
-            outcome.device_id, outcome.fingerprint
+            outcome.device_id,
+            mask_fingerprint(&outcome.fingerprint)
         ),
     );
 
@@ -464,9 +549,9 @@ async fn cmd_config(cmd: ConfigCmd) -> Result<()> {
                 })?
                 .collect::<rusqlite::Result<_>>()?;
             if rows.is_empty() {
-                println!("(no config entries)");
+                style::info("no config entries");
             } else {
-                table::print(&["KEY", "VALUE"], &rows);
+                table::print(&["Key", "Value"], &rows);
             }
         }
         ConfigCmd::Get { key } => {
@@ -480,11 +565,11 @@ async fn cmd_config(cmd: ConfigCmd) -> Result<()> {
             if let Some(v) = value {
                 println!("{v}");
             } else {
-                eprintln!("(unset)");
-                std::process::exit(1);
+                bail!("no config entry for {key}");
             }
         }
         ConfigCmd::Set { key, value } => {
+            let key_msg = key.clone();
             writer
                 .execute(move |c| {
                     c.execute(
@@ -496,9 +581,10 @@ async fn cmd_config(cmd: ConfigCmd) -> Result<()> {
                 })
                 .await
                 .map_err(|e| anyhow!("{e}"))?;
-            println!("ok");
+            style::success(format!("set {key_msg}"));
         }
         ConfigCmd::Remove { key } => {
+            let key_msg = key.clone();
             let n = writer
                 .execute(move |c| {
                     Ok(c.execute("DELETE FROM config WHERE key = ?1", rusqlite::params![key])?)
@@ -506,9 +592,9 @@ async fn cmd_config(cmd: ConfigCmd) -> Result<()> {
                 .await
                 .map_err(|e| anyhow!("{e}"))?;
             if n == 0 {
-                bail!("no config entry with key");
+                bail!("no config entry for {key_msg}");
             }
-            println!("removed");
+            style::success(format!("removed {key_msg}"));
         }
     }
     Ok(())
@@ -530,7 +616,7 @@ async fn cmd_auth(cmd: AuthCmd) -> Result<()> {
             label,
         } => {
             add_credential(&writer, &provider, &key, label.as_deref()).await?;
-            println!("ok");
+            style::success(format!("stored {provider} credential"));
         }
         AuthCmd::List => {
             let mut stmt = reader.prepare(
@@ -541,16 +627,18 @@ async fn cmd_auth(cmd: AuthCmd) -> Result<()> {
                     Ok(vec![
                         r.get::<_, String>(1)?,
                         r.get::<_, String>(2)?,
-                        mask(&r.get::<_, String>(3)?),
+                        style::mask_key(&r.get::<_, String>(3)?),
                         r.get::<_, Option<String>>(4)?.unwrap_or_else(|| "-".into()),
-                        r.get::<_, String>(0)?,
+                        short_id(&r.get::<_, String>(0)?),
                     ])
                 })?
                 .collect::<rusqlite::Result<_>>()?;
             if rows.is_empty() {
-                println!("(no credentials)");
+                style::info("no credentials");
             } else {
-                table::print(&["PROVIDER", "KIND", "KEY", "LABEL", "ID"], &rows);
+                style::section("Credentials");
+                println!();
+                table::print(&["Provider", "Kind", "Key", "Label", "ID"], &rows);
             }
         }
         AuthCmd::Remove { id } => {
@@ -567,7 +655,7 @@ async fn cmd_auth(cmd: AuthCmd) -> Result<()> {
             if n == 0 {
                 bail!("no credential with that id");
             }
-            println!("removed");
+            style::success("removed");
         }
     }
     Ok(())
@@ -598,16 +686,8 @@ async fn add_credential(
     Ok(())
 }
 
-fn mask(value: &str) -> String {
-    let chars: Vec<char> = value.chars().collect();
-    if chars.len() <= 8 {
-        return "****".into();
-    }
-    let visible_start: String = chars.iter().take(4).collect();
-    let mut tail: Vec<char> = chars.iter().rev().take(4).copied().collect();
-    tail.reverse();
-    let visible_end: String = tail.into_iter().collect();
-    format!("{visible_start}…{visible_end}")
+fn short_id(uuid: &str) -> String {
+    uuid.chars().take(8).collect()
 }
 
 async fn cmd_device(cmd: DeviceCmd) -> Result<()> {
@@ -618,29 +698,29 @@ async fn cmd_device(cmd: DeviceCmd) -> Result<()> {
             let devices: Vec<DeviceRecord> =
                 pairing::list_devices(&reader).map_err(|e| anyhow!("{e}"))?;
             if devices.is_empty() {
-                println!("(no devices)");
+                style::info("no devices");
                 return Ok(());
             }
+            style::section("Devices");
+            println!();
             let rows: Vec<Vec<String>> = devices
                 .iter()
                 .map(|d| {
-                    use std::fmt::Write;
-                    let mut pk_hex = String::with_capacity(17);
-                    for b in d.public_key.0.iter().take(8) {
-                        write!(pk_hex, "{b:02x}").unwrap();
-                    }
-                    pk_hex.push('…');
-                    vec![d.id.clone(), d.name.clone(), pk_hex]
+                    vec![
+                        short_id(&d.id),
+                        d.name.clone(),
+                        fingerprint_short(&d.public_key.0),
+                    ]
                 })
                 .collect();
-            table::print(&["ID", "NAME", "KEY"], &rows);
+            table::print(&["ID", "Name", "Key"], &rows);
         }
         DeviceCmd::Remove { id } => {
             if pairing::revoke_device(&writer, id)
                 .await
                 .map_err(|e| anyhow!("{e}"))?
             {
-                println!("removed");
+                style::success("removed");
             } else {
                 bail!("no device with that id");
             }
@@ -665,16 +745,18 @@ async fn cmd_model(cmd: ModelCmd) -> Result<()> {
                     ]
                 })
                 .collect();
-            table::print(&["ID", "PROVIDER", "CONTEXT"], &rows);
+            style::section("Models");
+            println!();
+            table::print(&["ID", "Provider", "Context"], &rows);
             Ok(())
         }
         ModelCmd::Set { id } => {
             daemon_rpc::call(
                 "v1.config.set",
-                Some(serde_json::json!({ "key": "default_model", "value": id })),
+                Some(serde_json::json!({ "key": "default_model", "value": &id })),
             )
             .await?;
-            println!("default_model ← {id}");
+            style::success(format!("set default_model to {id}"));
             Ok(())
         }
         ModelCmd::Get { id: None } => {
@@ -684,7 +766,7 @@ async fn cmd_model(cmd: ModelCmd) -> Result<()> {
             )
             .await?;
             let current = v.get("value").and_then(|x| x.as_str()).unwrap_or("(unset)");
-            println!("default_model: {current}");
+            style::kv("default_model", current, 14);
             Ok(())
         }
         ModelCmd::Get { id: Some(id) } => {
@@ -692,9 +774,10 @@ async fn cmd_model(cmd: ModelCmd) -> Result<()> {
             let Some(m) = reg.iter().find(|m| m.id == id) else {
                 bail!("unknown model: {id}");
             };
-            println!("id:        {}", m.id);
-            println!("provider:  {}", m.provider);
-            println!("context:   {}", m.context_window);
+            style::section(&format!("Model {}", m.id));
+            println!();
+            style::kv("provider", &m.provider, 10);
+            style::kv("context", m.context_window, 10);
             Ok(())
         }
     }
@@ -710,9 +793,13 @@ async fn cmd_skill(cmd: SkillCmd) -> Result<()> {
                 .cloned()
                 .unwrap_or_default();
             if skills.is_empty() {
-                println!("no skills discovered. scan paths:");
-                println!("  <cwd>/.harness/skills,  <cwd>/.agents/skills,  <cwd>/.claude/skills");
-                println!("  ~/.harness/skills,      ~/.agents/skills,      ~/.claude/skills");
+                style::info("no skills discovered");
+                style::hint(
+                    "scan paths: <cwd>/.harness/skills, <cwd>/.agents/skills, <cwd>/.claude/skills",
+                );
+                style::hint(
+                    "             ~/.harness/skills,      ~/.agents/skills,      ~/.claude/skills",
+                );
                 return Ok(());
             }
             let rows: Vec<Vec<String>> = skills
@@ -734,13 +821,15 @@ async fn cmd_skill(cmd: SkillCmd) -> Result<()> {
                     ]
                 })
                 .collect();
-            table::print(&["NAME", "DESCRIPTION", "LOCATION"], &rows);
+            style::section("Skills");
+            println!();
+            table::print(&["Name", "Description", "Location"], &rows);
             Ok(())
         }
         SkillCmd::Get { name } => {
             let v = daemon_rpc::call(
                 "v1.skill.activate",
-                Some(serde_json::json!({ "name": name })),
+                Some(serde_json::json!({ "name": &name })),
             )
             .await?;
             let dir = v.get("directory").and_then(|x| x.as_str()).unwrap_or("");
@@ -750,13 +839,16 @@ async fn cmd_skill(cmd: SkillCmd) -> Result<()> {
                 .and_then(|x| x.as_array())
                 .cloned()
                 .unwrap_or_default();
-            println!("skill: {name}");
-            println!("dir:   {dir}");
+            style::section(&format!("Skill {name}"));
+            println!();
+            style::kv("dir", dir, 10);
             if !resources.is_empty() {
-                println!("resources:");
+                println!();
+                style::section("Resources");
                 for r in resources {
                     if let Some(s) = r.as_str() {
-                        println!("  - {s}");
+                        let d = style::dim();
+                        println!("  {d}{s}{d:#}");
                     }
                 }
             }
@@ -777,9 +869,8 @@ async fn cmd_mcp(cmd: McpCmd) -> Result<()> {
                 .cloned()
                 .unwrap_or_default();
             if servers.is_empty() {
-                println!(
-                    "no MCP servers registered. add one with `harness mcp add NAME -- COMMAND`."
-                );
+                style::info("no MCP servers registered");
+                style::hint("add one with `harness mcp add NAME -- COMMAND`");
                 return Ok(());
             }
             let rows: Vec<Vec<String>> = servers
@@ -806,7 +897,9 @@ async fn cmd_mcp(cmd: McpCmd) -> Result<()> {
                     ]
                 })
                 .collect();
-            table::print(&["NAME", "COMMAND", "ARGS"], &rows);
+            style::section("MCP servers");
+            println!();
+            table::print(&["Name", "Command", "Args"], &rows);
             Ok(())
         }
         McpCmd::Add {
@@ -820,7 +913,7 @@ async fn cmd_mcp(cmd: McpCmd) -> Result<()> {
             let v = match daemon_rpc::call(
                 "v1.mcp.add",
                 Some(serde_json::json!({
-                    "name": name,
+                    "name": &name,
                     "command": command,
                     "args": args,
                 })),
@@ -834,12 +927,12 @@ async fn cmd_mcp(cmd: McpCmd) -> Result<()> {
                 }
             };
             let added = v.get("added").and_then(|x| x.as_str()).unwrap_or(&name);
-            steps.ok_message(s_register, format!("registered: {added}"));
+            steps.ok_message(s_register, format!("registered {added}"));
             Ok(())
         }
         McpCmd::Remove { name } => {
-            daemon_rpc::call("v1.mcp.remove", Some(serde_json::json!({ "name": name }))).await?;
-            println!("removed: {name}");
+            daemon_rpc::call("v1.mcp.remove", Some(serde_json::json!({ "name": &name }))).await?;
+            style::success(format!("removed {name}"));
             Ok(())
         }
     }
@@ -861,14 +954,16 @@ async fn cmd_doctor() -> Result<()> {
         Ok(v) => v,
         Err(e) => {
             steps.fail(s_socket, &e.to_string());
-            println!("    start the daemon: `harnessd`");
+            println!();
+            style::hint("start the daemon with `harnessd`");
             std::process::exit(1);
         }
     };
     let version = ping.get("version").and_then(|v| v.as_str()).unwrap_or("?");
-    steps.ok_message(s_socket, format!("daemon socket — v{version}"));
+    steps.ok_message(s_socket, format!("daemon socket  v{version}"));
 
     let mut any_failed = false;
+    let mut hints: Vec<&str> = Vec::new();
 
     steps.start(s_proto);
     match daemon_rpc::call(
@@ -883,7 +978,7 @@ async fn cmd_doctor() -> Result<()> {
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0);
             if sel > 0 {
-                steps.ok_message(s_proto, format!("protocol v{sel}"));
+                steps.ok_message(s_proto, format!("protocol  v{sel}"));
             } else {
                 any_failed = true;
                 steps.fail(s_proto, "no version selected");
@@ -903,10 +998,11 @@ async fn cmd_doctor() -> Result<()> {
                 .and_then(|x| x.as_array())
                 .map_or(0, Vec::len);
             if count > 0 {
-                steps.ok_message(s_creds, format!("credentials: {count}"));
+                steps.ok_message(s_creds, format!("credentials  {count} stored"));
             } else {
                 any_failed = true;
-                steps.fail(s_creds, "none — run `harness auth login`");
+                steps.fail(s_creds, "none stored");
+                hints.push("run `harness auth login` to sign in a provider");
             }
         }
         Err(e) => {
@@ -922,7 +1018,7 @@ async fn cmd_doctor() -> Result<()> {
                 .get("skills")
                 .and_then(|x| x.as_array())
                 .map_or(0, Vec::len);
-            steps.ok_message(s_skills, format!("skills: {count}"));
+            steps.ok_message(s_skills, format!("skills  {count} discovered"));
         }
         Err(e) => {
             any_failed = true;
@@ -937,7 +1033,7 @@ async fn cmd_doctor() -> Result<()> {
                 .get("servers")
                 .and_then(|x| x.as_array())
                 .map_or(0, Vec::len);
-            steps.ok_message(s_mcp, format!("mcp servers: {count}"));
+            steps.ok_message(s_mcp, format!("mcp servers  {count} registered"));
         }
         Err(e) => {
             any_failed = true;
@@ -945,8 +1041,20 @@ async fn cmd_doctor() -> Result<()> {
         }
     }
 
+    println!();
     if any_failed {
+        for h in &hints {
+            style::hint(h);
+        }
+        if !hints.is_empty() {
+            println!();
+        }
+        let r = style::err();
+        println!("{r}1 or more checks failed{r:#}");
         std::process::exit(1);
+    } else {
+        let g = style::green();
+        println!("{g}all checks passed{g:#}");
     }
     Ok(())
 }
