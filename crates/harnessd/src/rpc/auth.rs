@@ -1,11 +1,13 @@
 use crate::Daemon;
 use crate::rpc::errors::{map_storage_err, rpc_err};
 use crate::rpc::mappers::preview_secret;
+use harness_auth::PairOutcome;
 use harness_proto::ErrorCode;
 use harness_rpc::{Handler, handler, parse_params};
 use harness_storage::{config as cfg_store, credentials as creds_store};
 use serde::Deserialize;
 use serde_json::json;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -117,6 +119,57 @@ pub fn pair_new(d: Arc<Daemon>) -> Arc<dyn Handler> {
             }))
         }
     })
+}
+
+pub fn pair_await(d: Arc<Daemon>) -> Arc<dyn Handler> {
+    handler(move |p, _s| {
+        let d = d.clone();
+        async move {
+            #[derive(Deserialize)]
+            struct Params {
+                code: String,
+            }
+            let Params { code } = parse_params(p)?;
+            let outcome = d.security.pairing.wait(&code).await;
+            Ok(match outcome {
+                Some(PairOutcome::Connected {
+                    device_id,
+                    device_name,
+                    public_key,
+                }) => json!({
+                    "status": "connected",
+                    "device_id": device_id,
+                    "device_name": device_name,
+                    "device_public_key": hex32(&public_key.0),
+                }),
+                Some(PairOutcome::Cancelled) => json!({ "status": "cancelled" }),
+                None => json!({ "status": "expired" }),
+            })
+        }
+    })
+}
+
+pub fn pair_cancel(d: Arc<Daemon>) -> Arc<dyn Handler> {
+    handler(move |p, _s| {
+        let d = d.clone();
+        async move {
+            #[derive(Deserialize)]
+            struct Params {
+                code: String,
+            }
+            let Params { code } = parse_params(p)?;
+            let cancelled = d.security.pairing.cancel(&code);
+            Ok(json!({ "cancelled": cancelled }))
+        }
+    })
+}
+
+fn hex32(bytes: &[u8; 32]) -> String {
+    let mut s = String::with_capacity(64);
+    for b in bytes {
+        write!(s, "{b:02x}").expect("write to String");
+    }
+    s
 }
 
 pub async fn rebuild_pool(d: &Arc<Daemon>) {
