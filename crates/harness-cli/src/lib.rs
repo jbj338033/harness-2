@@ -17,10 +17,17 @@ use harness_storage::{Database, Writer, WriterHandle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// IMPLEMENTS: D-160
+// IMPLEMENTS: D-160, D-452, D-453, D-454, D-456
 /// Verifiable selling points the README publishes. Held as a const so the
 /// `harness about` command and any future docgen draw from one source —
 /// D-160 forbids vague "SOTA" claims; only published lower bounds appear here.
+///
+/// Doc entry-point hierarchy (D-452/D-453): root `AGENTS.md` is the
+/// universal contract; tool-specific files (`CLAUDE.md`, `.cursor/rules`,
+/// `.github/copilot-instructions.md`) layer on top. Design workspace has
+/// its own `.harness-design/AGENTS.md` (D-453) pointing at DECISIONS as
+/// SoT, with INDEX restructured around stable anchors (D-454) and ARCHIVE
+/// split into `loops/`, `patches/`, `misc/` (D-456).
 pub const SELLING_POINTS: &[&str] = &[
     "persistent daemon — sessions outlive the TUI window",
     "≥ 55% prompt-cache cost reduction (Anthropic 1h system + 5m rolling)",

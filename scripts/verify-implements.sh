@@ -13,7 +13,7 @@ grep -E '^- \*\*D-[0-9]+\*\*' "$DECISIONS" \
   | sed -E 's/^- \*\*(D-[0-9]+)\*\*.*/\1/' \
   | sort -u > "$OUT_DIR/active.txt"
 
-grep -rhoE '// IMPLEMENTS: D-[0-9]+(, D-[0-9]+)*' crates/ 2>/dev/null \
+grep -rhoE '(//|#) IMPLEMENTS: D-[0-9]+(, D-[0-9]+)*' crates/ scripts/ 2>/dev/null \
   | grep -oE 'D-[0-9]+' \
   | sort -u > "$OUT_DIR/implemented.txt"
 
