@@ -1,5 +1,6 @@
+// IMPLEMENTS: D-075
 use crate::{Result, StorageError, db};
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
 use std::path::Path;
 use tokio::sync::{mpsc, oneshot};
 
@@ -42,6 +43,20 @@ impl WriterHandle {
         Ok(*any
             .downcast::<T>()
             .expect("writer closure returned unexpected type"))
+    }
+
+    pub async fn with_tx<F, T>(&self, f: F) -> Result<T>
+    where
+        F: for<'a> FnOnce(&'a Transaction<'a>) -> Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.execute(move |conn| {
+            let tx = conn.transaction()?;
+            let value = f(&tx)?;
+            tx.commit()?;
+            Ok(value)
+        })
+        .await
     }
 }
 
@@ -154,5 +169,81 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, StorageError::Sqlite(_)));
+    }
+
+    #[tokio::test]
+    async fn with_tx_commits_on_success() {
+        let (_f, h) = setup();
+        h.with_tx(|tx| {
+            tx.execute("INSERT INTO config (key, value) VALUES ('a', '1')", [])?;
+            tx.execute("INSERT INTO config (key, value) VALUES ('b', '2')", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let count: i64 = h
+            .execute(
+                |conn| Ok(conn.query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))?),
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn with_tx_rolls_back_when_closure_errors() {
+        let (_f, h) = setup();
+        let err = h
+            .with_tx(|tx| -> Result<()> {
+                tx.execute("INSERT INTO config (key, value) VALUES ('a', '1')", [])?;
+                Err(StorageError::Invariant("rollback please".into()))
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, StorageError::Invariant(_)));
+
+        let count: i64 = h
+            .execute(
+                |conn| Ok(conn.query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))?),
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "failed transaction must leave no rows");
+    }
+
+    #[tokio::test]
+    async fn with_tx_rolls_back_when_sql_errors_midway() {
+        let (_f, h) = setup();
+        let err = h
+            .with_tx(|tx| {
+                tx.execute("INSERT INTO config (key, value) VALUES ('a', '1')", [])?;
+                tx.execute("THIS IS NOT SQL", [])?;
+                Ok(())
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, StorageError::Sqlite(_)));
+
+        let count: i64 = h
+            .execute(
+                |conn| Ok(conn.query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))?),
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn with_tx_returns_value() {
+        let (_f, h) = setup();
+        let n = h
+            .with_tx(|tx| {
+                tx.execute("INSERT INTO config (key, value) VALUES ('k', 'v')", [])?;
+                Ok(tx.last_insert_rowid())
+            })
+            .await
+            .unwrap();
+        assert!(n > 0);
     }
 }
