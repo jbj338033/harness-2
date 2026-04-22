@@ -11,13 +11,41 @@ pub enum ModelCapability {
     LongContext,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// IMPLEMENTS: D-445
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Model {
     pub id: String,
     pub provider: String,
     pub context_window: u32,
     #[serde(default)]
     pub capabilities: Vec<ModelCapability>,
+    /// SPDX licence identifier (`Apache-2.0`, `Proprietary`, …) — required
+    /// for compliance manifests.
+    #[serde(default)]
+    pub license: String,
+    /// ISO-3166 alpha-2 country of model origin (`US`, `CN`, `KR`, …) —
+    /// drives US BIS AI Diffusion + KR AI Basic Act gating.
+    #[serde(default)]
+    pub origin_country: String,
+    /// US BIS AI Diffusion tier (1=most restricted, 3=least). `None` = not
+    /// in scope.
+    #[serde(default)]
+    pub bis_tier: Option<u8>,
+    /// EU AI Act Article 53 GPAI exemption (open-weight models with public
+    /// weights and architecture).
+    #[serde(default)]
+    pub eu_art53_exempt: bool,
+    /// Korean AI Basic Act "high-impact" classification.
+    #[serde(default)]
+    pub kr_high_impact: bool,
+    /// Free-form safety profile tag — eg. `instruction_only`,
+    /// `alignment_tuned`, `unconstrained_research`.
+    #[serde(default)]
+    pub safety_profile: String,
+    /// Tool calling wire format — eg. `anthropic_xml`, `openai_json`,
+    /// `gemini_oneof`, `none`.
+    #[serde(default)]
+    pub tool_format: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -83,6 +111,13 @@ impl ModelRegistry {
                 provider: "ollama".into(),
                 context_window: 128_000,
                 capabilities: vec![ModelCapability::Tools],
+                license: "Various-OpenWeights".into(),
+                origin_country: "XX".into(),
+                bis_tier: None,
+                eu_art53_exempt: true,
+                kr_high_impact: false,
+                safety_profile: "instruction_only".into(),
+                tool_format: "openai_json".into(),
             });
         }
         Ok(self.len() - before)
@@ -91,60 +126,96 @@ impl ModelRegistry {
     fn seed_builtins(&mut self) {
         use ModelCapability::{LongContext, Reasoning, Tools, Vision};
 
-        let builtins: &[Model] = &[
-            Model {
-                id: "claude-opus-4-6".into(),
-                provider: "anthropic".into(),
-                context_window: 1_000_000,
-                capabilities: vec![Vision, Tools, Reasoning, LongContext],
-            },
-            Model {
-                id: "claude-sonnet-4-6".into(),
-                provider: "anthropic".into(),
-                context_window: 1_000_000,
-                capabilities: vec![Vision, Tools, Reasoning, LongContext],
-            },
-            Model {
-                id: "claude-haiku-4-5".into(),
-                provider: "anthropic".into(),
-                context_window: 200_000,
-                capabilities: vec![Vision, Tools],
-            },
-            Model {
-                id: "gpt-5.4".into(),
-                provider: "openai".into(),
-                context_window: 1_050_000,
-                capabilities: vec![Vision, Tools, Reasoning, LongContext],
-            },
-            Model {
-                id: "o3".into(),
-                provider: "openai".into(),
-                context_window: 200_000,
-                capabilities: vec![Tools, Reasoning],
-            },
-            Model {
-                id: "o4-mini".into(),
-                provider: "openai".into(),
-                context_window: 200_000,
-                capabilities: vec![Tools, Reasoning],
-            },
-            Model {
-                id: "gemini-3.1-pro".into(),
-                provider: "google".into(),
-                context_window: 2_000_000,
-                capabilities: vec![Vision, Tools, Reasoning, LongContext],
-            },
-            Model {
-                id: "gemini-2.5-flash".into(),
-                provider: "google".into(),
-                context_window: 1_000_000,
-                capabilities: vec![Vision, Tools, LongContext],
-            },
+        let anthropic = |id: &str, ctx: u32, caps: Vec<ModelCapability>| Model {
+            id: id.into(),
+            provider: "anthropic".into(),
+            context_window: ctx,
+            capabilities: caps,
+            license: "Proprietary".into(),
+            origin_country: "US".into(),
+            bis_tier: Some(2),
+            eu_art53_exempt: false,
+            kr_high_impact: true,
+            safety_profile: "alignment_tuned".into(),
+            tool_format: "anthropic_xml".into(),
+        };
+        let openai = |id: &str, ctx: u32, caps: Vec<ModelCapability>| Model {
+            id: id.into(),
+            provider: "openai".into(),
+            context_window: ctx,
+            capabilities: caps,
+            license: "Proprietary".into(),
+            origin_country: "US".into(),
+            bis_tier: Some(2),
+            eu_art53_exempt: false,
+            kr_high_impact: true,
+            safety_profile: "alignment_tuned".into(),
+            tool_format: "openai_json".into(),
+        };
+        let google = |id: &str, ctx: u32, caps: Vec<ModelCapability>| Model {
+            id: id.into(),
+            provider: "google".into(),
+            context_window: ctx,
+            capabilities: caps,
+            license: "Proprietary".into(),
+            origin_country: "US".into(),
+            bis_tier: Some(2),
+            eu_art53_exempt: false,
+            kr_high_impact: true,
+            safety_profile: "alignment_tuned".into(),
+            tool_format: "gemini_oneof".into(),
+        };
+
+        let builtins: Vec<Model> = vec![
+            anthropic(
+                "claude-opus-4-6",
+                1_000_000,
+                vec![Vision, Tools, Reasoning, LongContext],
+            ),
+            anthropic(
+                "claude-sonnet-4-6",
+                1_000_000,
+                vec![Vision, Tools, Reasoning, LongContext],
+            ),
+            anthropic("claude-haiku-4-5", 200_000, vec![Vision, Tools]),
+            openai(
+                "gpt-5.4",
+                1_050_000,
+                vec![Vision, Tools, Reasoning, LongContext],
+            ),
+            openai("o3", 200_000, vec![Tools, Reasoning]),
+            openai("o4-mini", 200_000, vec![Tools, Reasoning]),
+            google(
+                "gemini-3.1-pro",
+                2_000_000,
+                vec![Vision, Tools, Reasoning, LongContext],
+            ),
+            google(
+                "gemini-2.5-flash",
+                1_000_000,
+                vec![Vision, Tools, LongContext],
+            ),
         ];
 
-        for m in builtins {
+        for m in &builtins {
             self.insert(m.clone());
         }
+    }
+
+    /// Load extra models from a `model_registry.toml` manifest. Per D-445
+    /// the file lists `[[models]]` tables with the full compliance metadata.
+    pub fn ingest_toml_manifest(&mut self, body: &str) -> Result<usize, toml::de::Error> {
+        #[derive(serde::Deserialize)]
+        struct Manifest {
+            #[serde(default)]
+            models: Vec<Model>,
+        }
+        let parsed: Manifest = toml::from_str(body)?;
+        let before = self.len();
+        for m in parsed.models {
+            self.insert(m);
+        }
+        Ok(self.len() - before)
     }
 }
 
@@ -167,16 +238,66 @@ mod tests {
             id: "custom".into(),
             provider: "ollama".into(),
             context_window: 128_000,
-            capabilities: vec![],
+            ..Model::default()
         });
         r.insert(Model {
             id: "custom".into(),
             provider: "ollama".into(),
             context_window: 256_000,
-            capabilities: vec![],
+            ..Model::default()
         });
         assert_eq!(r.get("custom").unwrap().context_window, 256_000);
         assert_eq!(r.len(), 1);
+    }
+
+    #[test]
+    fn builtin_models_carry_compliance_metadata() {
+        let r = ModelRegistry::with_builtins();
+        let anthropic = r.get("claude-opus-4-6").unwrap();
+        assert_eq!(anthropic.origin_country, "US");
+        assert_eq!(anthropic.tool_format, "anthropic_xml");
+        assert_eq!(anthropic.license, "Proprietary");
+        assert!(
+            anthropic.kr_high_impact,
+            "US frontier models fall under kr high impact"
+        );
+        assert_eq!(anthropic.bis_tier, Some(2));
+
+        let openai = r.get("o3").unwrap();
+        assert_eq!(openai.tool_format, "openai_json");
+
+        let google = r.get("gemini-3.1-pro").unwrap();
+        assert_eq!(google.tool_format, "gemini_oneof");
+    }
+
+    #[test]
+    fn toml_manifest_loads_compliance_fields() {
+        let body = r#"
+            [[models]]
+            id = "mistral-large"
+            provider = "local"
+            context_window = 128000
+            license = "Apache-2.0"
+            origin_country = "FR"
+            eu_art53_exempt = true
+            safety_profile = "instruction_only"
+            tool_format = "openai_json"
+        "#;
+        let mut r = ModelRegistry::new();
+        let added = r.ingest_toml_manifest(body).unwrap();
+        assert_eq!(added, 1);
+        let m = r.get("mistral-large").unwrap();
+        assert_eq!(m.license, "Apache-2.0");
+        assert_eq!(m.origin_country, "FR");
+        assert!(m.eu_art53_exempt);
+        assert!(!m.kr_high_impact);
+        assert!(m.bis_tier.is_none());
+    }
+
+    #[test]
+    fn toml_manifest_rejects_garbage() {
+        let mut r = ModelRegistry::new();
+        assert!(r.ingest_toml_manifest("not =valid= toml{").is_err());
     }
 
     #[test]
