@@ -254,14 +254,13 @@ fn open_db() -> Result<(DataDir, Database, WriterHandle)> {
 
 const SETUP_PROVIDERS: &[&str] = &["anthropic", "openai", "google", "ollama"];
 
+// IMPLEMENTS: D-041
 async fn cmd_init() -> Result<()> {
     let theme = style::dialoguer_theme();
     style::section(&format!("harness init {VERSION}"));
     println!();
     let (dd, _db, writer) = open_db()?;
-    let home = std::env::var("HOME").unwrap_or_default();
-    let display_path = dd.root.display().to_string().replacen(&home, "~", 1);
-    style::kv("data dir", display_path, 12);
+    style::kv("data dir", display_path(&dd.root), 12);
     println!();
 
     loop {
@@ -292,6 +291,7 @@ async fn cmd_init() -> Result<()> {
         println!();
     }
 
+    prompt_default_model(&theme, &dd, &writer).await?;
     prompt_workspace_trust(&theme, &dd, &writer).await?;
 
     let pair_now = Confirm::with_theme(&theme)
@@ -312,7 +312,88 @@ async fn cmd_init() -> Result<()> {
             Err(e) => style::failure(format!("could not reach daemon: {e}")),
         }
     }
+
+    print_next_steps();
     Ok(())
+}
+
+// IMPLEMENTS: D-041
+async fn prompt_default_model(
+    theme: &dialoguer::theme::ColorfulTheme,
+    dd: &DataDir,
+    writer: &WriterHandle,
+) -> Result<()> {
+    let reader = rusqlite::Connection::open(dd.db_path()).context("open reader")?;
+    if harness_storage::config::get(&reader, "default_model")
+        .map_err(|e| anyhow!("{e}"))?
+        .is_some()
+    {
+        return Ok(());
+    }
+    let registered: std::collections::BTreeSet<String> =
+        harness_storage::credentials::list(&reader)
+            .map_err(|e| anyhow!("{e}"))?
+            .into_iter()
+            .map(|c| c.provider)
+            .collect();
+    if registered.is_empty() {
+        return Ok(());
+    }
+    let registry = ModelRegistry::with_builtins();
+    let mut models: Vec<&harness_lifecycle::Model> = registry
+        .iter()
+        .filter(|m| registered.contains(&m.provider))
+        .collect();
+    if models.is_empty() {
+        return Ok(());
+    }
+    models.sort_by(|a, b| a.provider.cmp(&b.provider).then(a.id.cmp(&b.id)));
+    let labels: Vec<String> = models
+        .iter()
+        .map(|m| format!("{:<10} {}", m.provider, m.id))
+        .collect();
+    let suggested = SETUP_DEFAULTS
+        .iter()
+        .find(|(p, _)| registered.contains(*p))
+        .map(|(_, m)| *m);
+    let default_idx = suggested
+        .and_then(|s| models.iter().position(|m| m.id == s))
+        .unwrap_or(0);
+    println!();
+    let idx = Select::with_theme(theme)
+        .with_prompt("Default model")
+        .items(&labels)
+        .default(default_idx)
+        .interact()?;
+    let chosen = models[idx].id.clone();
+    harness_storage::config::set(writer, "default_model".into(), chosen.clone())
+        .await
+        .map_err(|e| anyhow!("{e}"))?;
+    style::success(format!("set default_model = {chosen}"));
+    Ok(())
+}
+
+const SETUP_DEFAULTS: &[(&str, &str)] = &[
+    ("anthropic", "claude-sonnet-4-6"),
+    ("openai", "gpt-5.4"),
+    ("google", "gemini-3.1-pro"),
+];
+
+// IMPLEMENTS: D-041
+fn print_next_steps() {
+    println!();
+    style::section("Next steps");
+    println!();
+    let p = style::primary();
+    println!("  1. start the daemon (in its own shell)");
+    println!("       {p}harnessd{p:#}");
+    println!();
+    println!("  2. attach the tui");
+    println!("       {p}harness{p:#}");
+    println!();
+    println!("  3. type a message and press enter");
+    println!();
+    style::hint("`harness doctor` runs an end-to-end health check if anything goes wrong");
 }
 
 // IMPLEMENTS: D-205
