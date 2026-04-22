@@ -175,6 +175,135 @@ pub fn count_session(conn: &Connection, session_id: &str) -> Result<i64> {
     )?)
 }
 
+// IMPLEMENTS: D-448
+pub fn count(conn: &Connection) -> Result<i64> {
+    Ok(conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BackfillStats {
+    pub messages: usize,
+    pub tool_calls: usize,
+}
+
+pub fn backfill(tx: &rusqlite::Transaction<'_>) -> Result<BackfillStats> {
+    Ok(BackfillStats {
+        messages: backfill_messages(tx)?,
+        tool_calls: backfill_tool_calls(tx)?,
+    })
+}
+
+fn backfill_messages(tx: &rusqlite::Transaction<'_>) -> Result<usize> {
+    let mut stmt = tx.prepare(
+        "SELECT m.id, a.session_id, m.role, m.content, m.tokens_in, m.tokens_out,
+                m.cost, m.model, m.kind, m.created_at, m.agent_id
+         FROM messages m
+         JOIN agents a ON a.id = m.agent_id
+         WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.id = m.id)",
+    )?;
+    let mut rows = stmt.query([])?;
+    let mut inserted = 0usize;
+    while let Some(row) = rows.next()? {
+        let id: String = row.get(0)?;
+        let session_id: String = row.get(1)?;
+        let role: String = row.get(2)?;
+        let content: Option<String> = row.get(3)?;
+        let tokens_in: Option<i64> = row.get(4)?;
+        let tokens_out: Option<i64> = row.get(5)?;
+        let cost: Option<f64> = row.get(6)?;
+        let model: Option<String> = row.get(7)?;
+        let kind_str: String = row.get(8)?;
+        let created_at: i64 = row.get(9)?;
+        let agent_id: String = row.get(10)?;
+
+        let event_kind = match role.as_str() {
+            "user" => EventKind::MessageUser,
+            "assistant" => EventKind::MessageAssistant,
+            _ => EventKind::MessageSystem,
+        };
+        let actor = match role.as_str() {
+            "user" => "human:user".to_string(),
+            "assistant" => format!("agent:{agent_id}"),
+            _ => "system:harness".to_string(),
+        };
+        let payload = serde_json::json!({
+            "schema_version": 1,
+            "content": content,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost": cost,
+            "model": model,
+            "kind": kind_str,
+            "agent_id": agent_id,
+        });
+
+        tx.execute(
+            "INSERT INTO events (id, session_id, actor, kind, correlation_id, causation_id, payload, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7)",
+            params![
+                id,
+                session_id,
+                actor,
+                event_kind.as_str(),
+                agent_id,
+                payload.to_string(),
+                created_at
+            ],
+        )?;
+        inserted += 1;
+    }
+    Ok(inserted)
+}
+
+fn backfill_tool_calls(tx: &rusqlite::Transaction<'_>) -> Result<usize> {
+    let mut stmt = tx.prepare(
+        "SELECT t.id, a.session_id, t.message_id, t.name, t.input, t.output,
+                t.exit_code, t.duration_ms, t.created_at
+         FROM tool_calls t
+         JOIN messages m ON m.id = t.message_id
+         JOIN agents a ON a.id = m.agent_id
+         WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.id = t.id)",
+    )?;
+    let mut rows = stmt.query([])?;
+    let mut inserted = 0usize;
+    while let Some(row) = rows.next()? {
+        let id: String = row.get(0)?;
+        let session_id: String = row.get(1)?;
+        let message_id: String = row.get(2)?;
+        let name: String = row.get(3)?;
+        let input: String = row.get(4)?;
+        let output: Option<String> = row.get(5)?;
+        let exit_code: Option<i64> = row.get(6)?;
+        let duration_ms: Option<i64> = row.get(7)?;
+        let created_at: i64 = row.get(8)?;
+
+        let payload = serde_json::json!({
+            "schema_version": 1,
+            "name": name,
+            "input": serde_json::from_str::<Value>(&input).unwrap_or(Value::String(input)),
+            "output": output,
+            "exit_code": exit_code,
+            "duration_ms": duration_ms,
+        });
+
+        tx.execute(
+            "INSERT INTO events (id, session_id, actor, kind, correlation_id, causation_id, payload, created_at)
+             VALUES (?1, ?2, ?3, 'tool_call', ?4, ?5, ?6, ?7)",
+            params![
+                id,
+                session_id,
+                format!("tool:{name}"),
+                message_id,
+                message_id,
+                payload.to_string(),
+                created_at
+            ],
+        )?;
+        inserted += 1;
+    }
+    Ok(inserted)
+}
+
 fn row_to_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredEvent> {
     let kind_str: String = row.get(3)?;
     let kind = EventKind::from_str(&kind_str).map_err(|msg| {
@@ -374,5 +503,163 @@ mod tests {
     #[test]
     fn event_kind_rejects_unknown_string() {
         assert!(EventKind::from_str("nope").is_err());
+    }
+
+    #[tokio::test]
+    async fn backfill_messages_copies_rows_idempotently() {
+        let (_f, w) = setup();
+        let now_ts = now().as_millis();
+        w.with_tx(move |tx| {
+            tx.execute(
+                "INSERT INTO sessions (id, cwd, created_at, updated_at) VALUES ('s1', '/tmp', ?1, ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO agents (id, session_id, role, model, status, created_at)
+                 VALUES ('a1', 's1', 'root', 'm', 'running', ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO messages (id, agent_id, role, content, created_at)
+                 VALUES ('m1', 'a1', 'user', 'hello', ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO messages (id, agent_id, role, content, created_at)
+                 VALUES ('m2', 'a1', 'assistant', 'hi', ?1)",
+                params![now_ts + 1],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let stats = w
+            .with_tx(|tx| {
+                let s = backfill(tx)?;
+                Ok(s)
+            })
+            .await
+            .unwrap();
+        assert_eq!(stats.messages, 2);
+
+        // Second run inserts nothing more
+        let stats = w
+            .with_tx(|tx| {
+                let s = backfill(tx)?;
+                Ok(s)
+            })
+            .await
+            .unwrap();
+        assert_eq!(stats.messages, 0);
+    }
+
+    #[tokio::test]
+    async fn backfill_assigns_event_kind_per_role() {
+        let (f, w) = setup();
+        let now_ts = now().as_millis();
+        w.with_tx(move |tx| {
+            tx.execute(
+                "INSERT INTO sessions (id, cwd, created_at, updated_at) VALUES ('s1', '/tmp', ?1, ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO agents (id, session_id, role, model, status, created_at)
+                 VALUES ('a1', 's1', 'root', 'm', 'running', ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO messages (id, agent_id, role, content, created_at)
+                 VALUES ('mu', 'a1', 'user', 'u', ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO messages (id, agent_id, role, content, created_at)
+                 VALUES ('ma', 'a1', 'assistant', 'a', ?1)",
+                params![now_ts + 1],
+            )?;
+            tx.execute(
+                "INSERT INTO messages (id, agent_id, role, content, created_at)
+                 VALUES ('ms', 'a1', 'system', 's', ?1)",
+                params![now_ts + 2],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        w.with_tx(|tx| {
+            backfill(tx)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let c = Connection::open(f.path()).unwrap();
+        let row = lookup(&c, "mu").unwrap().unwrap();
+        assert_eq!(row.kind, EventKind::MessageUser);
+        let row = lookup(&c, "ma").unwrap().unwrap();
+        assert_eq!(row.kind, EventKind::MessageAssistant);
+        assert_eq!(row.actor, "agent:a1");
+        let row = lookup(&c, "ms").unwrap().unwrap();
+        assert_eq!(row.kind, EventKind::MessageSystem);
+    }
+
+    #[tokio::test]
+    async fn backfill_tool_calls_links_to_message() {
+        let (f, w) = setup();
+        let now_ts = now().as_millis();
+        w.with_tx(move |tx| {
+            tx.execute(
+                "INSERT INTO sessions (id, cwd, created_at, updated_at) VALUES ('s1', '/tmp', ?1, ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO agents (id, session_id, role, model, status, created_at)
+                 VALUES ('a1', 's1', 'root', 'm', 'running', ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO messages (id, agent_id, role, content, created_at)
+                 VALUES ('m1', 'a1', 'assistant', 'using tool', ?1)",
+                params![now_ts],
+            )?;
+            tx.execute(
+                "INSERT INTO tool_calls (id, message_id, name, input, output, exit_code, duration_ms, created_at)
+                 VALUES ('t1', 'm1', 'fs.read', '{\"path\":\"x\"}', 'ok', 0, 12, ?1)",
+                params![now_ts],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let stats = w
+            .with_tx(|tx| {
+                let s = backfill(tx)?;
+                Ok(s)
+            })
+            .await
+            .unwrap();
+        assert_eq!(stats.tool_calls, 1);
+
+        let c = Connection::open(f.path()).unwrap();
+        let row = lookup(&c, "t1").unwrap().unwrap();
+        assert_eq!(row.kind, EventKind::ToolCall);
+        assert_eq!(row.actor, "tool:fs.read");
+        assert_eq!(row.causation_id.as_deref(), Some("m1"));
+        assert_eq!(row.correlation_id.as_deref(), Some("m1"));
+    }
+
+    #[tokio::test]
+    async fn count_returns_total_event_rows() {
+        let (f, w) = setup();
+        for i in 0..3 {
+            append(&w, evt("s1", EventKind::Perceive, json!({"i": i})))
+                .await
+                .unwrap();
+        }
+        let c = Connection::open(f.path()).unwrap();
+        assert_eq!(count(&c).unwrap(), 3);
     }
 }

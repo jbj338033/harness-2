@@ -1237,8 +1237,27 @@ async fn db_migrate(db_path: &std::path::Path, dry_run: bool, restore: bool) -> 
         .map_err(|e| anyhow!("{e}"))?
         .into();
     drop(conn);
-    std::fs::remove_file(&backup).context("remove backup after success")?;
     style::success(format!("migrated to version {target}"));
+
+    // Backfill events from messages / tool_calls (idempotent).
+    let writer = Writer::spawn(db_path).context("spawn writer")?;
+    let stats = writer
+        .with_tx(|tx| {
+            let s = harness_storage::events::backfill(tx)?;
+            Ok(s)
+        })
+        .await
+        .map_err(|e| anyhow!("{e}"))?;
+    if stats.messages > 0 || stats.tool_calls > 0 {
+        style::success(format!(
+            "backfilled events — messages: {}  tool_calls: {}",
+            stats.messages, stats.tool_calls
+        ));
+    } else {
+        style::info("events table already in sync");
+    }
+
+    std::fs::remove_file(&backup).context("remove backup after success")?;
     Ok(())
 }
 
