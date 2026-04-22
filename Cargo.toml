@@ -37,6 +37,7 @@ members = [
     "crates/harness-typestate",
     "crates/harness-taint",
     "crates/harness-autonomy",
+    "crates/harness-supply",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
