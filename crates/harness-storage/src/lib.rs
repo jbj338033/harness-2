@@ -1,8 +1,10 @@
+// IMPLEMENTS: D-211
 pub mod approvals;
 pub mod backup;
 pub mod config;
 pub mod credentials;
 pub mod db;
+pub mod encryption;
 pub mod events;
 pub mod migrations;
 pub mod reader;
