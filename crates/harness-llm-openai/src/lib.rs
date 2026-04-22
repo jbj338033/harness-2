@@ -28,10 +28,13 @@ struct OauthHandle {
     writer: WriterHandle,
 }
 
+// IMPLEMENTS: D-026
 pub struct OpenAiProvider {
     id: String,
     auth: AuthMode,
     base_url: String,
+    family: &'static str,
+    extra_headers: Vec<(String, String)>,
     client: Client,
 }
 
@@ -49,8 +52,66 @@ impl OpenAiProvider {
             id: id.into(),
             auth: AuthMode::ApiKey(api_key.into()),
             base_url: base_url.into(),
+            family: "openai",
+            extra_headers: Vec::new(),
             client: default_client(),
         }
+    }
+
+    /// Constructor for OpenAI-compatible third parties (DeepSeek,
+    /// OpenRouter, Groq, …). Lets the caller pin the wire family and
+    /// inject vendor headers without forking the wrapper (D-026).
+    pub fn with_compatible(
+        id: impl Into<String>,
+        api_key: impl Into<String>,
+        base_url: impl Into<String>,
+        family: &'static str,
+        extra_headers: Vec<(String, String)>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            auth: AuthMode::ApiKey(api_key.into()),
+            base_url: base_url.into(),
+            family,
+            extra_headers,
+            client: default_client(),
+        }
+    }
+
+    #[must_use]
+    pub fn deepseek(id: impl Into<String>, api_key: impl Into<String>) -> Self {
+        Self::with_compatible(
+            id,
+            api_key,
+            "https://api.deepseek.com",
+            "deepseek",
+            Vec::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn openrouter(id: impl Into<String>, api_key: impl Into<String>) -> Self {
+        Self::with_compatible(
+            id,
+            api_key,
+            "https://openrouter.ai/api",
+            "openrouter",
+            vec![
+                ("HTTP-Referer".into(), "https://harness.dev".into()),
+                ("X-Title".into(), "harness".into()),
+            ],
+        )
+    }
+
+    #[must_use]
+    pub fn groq(id: impl Into<String>, api_key: impl Into<String>) -> Self {
+        Self::with_compatible(
+            id,
+            api_key,
+            "https://api.groq.com/openai",
+            "groq",
+            Vec::new(),
+        )
     }
 
     #[must_use]
@@ -68,6 +129,8 @@ impl OpenAiProvider {
                 writer,
             })),
             base_url: CHATGPT_BASE.to_string(),
+            family: "openai",
+            extra_headers: Vec::new(),
             client: default_client(),
         }
     }
@@ -129,6 +192,9 @@ impl OpenAiProvider {
                 concat!("harness/", env!("CARGO_PKG_VERSION"), " (codex-compatible)"),
             );
         }
+        for (k, v) in &self.extra_headers {
+            builder = builder.header(k.as_str(), v.as_str());
+        }
         builder
             .json(&body)
             .send()
@@ -167,7 +233,7 @@ impl Provider for OpenAiProvider {
     }
 
     fn family(&self) -> &'static str {
-        "openai"
+        self.family
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ProviderError> {
@@ -393,5 +459,53 @@ mod tests {
         let p = OpenAiProvider::new("test", "x");
         assert_eq!(p.family(), "openai");
         assert_eq!(p.id(), "test");
+    }
+
+    #[test]
+    fn deepseek_constructor_pins_base_url_and_family() {
+        let p = OpenAiProvider::deepseek("ds", "sk");
+        assert_eq!(p.family(), "deepseek");
+        assert_eq!(p.base_url, "https://api.deepseek.com");
+    }
+
+    #[test]
+    fn openrouter_constructor_emits_attribution_headers() {
+        let p = OpenAiProvider::openrouter("or", "sk");
+        assert_eq!(p.family(), "openrouter");
+        let referer = p
+            .extra_headers
+            .iter()
+            .find(|(k, _)| k == "HTTP-Referer")
+            .map(|(_, v)| v.as_str());
+        assert_eq!(referer, Some("https://harness.dev"));
+    }
+
+    #[test]
+    fn groq_constructor_pins_base_url_and_family() {
+        let p = OpenAiProvider::groq("gq", "sk");
+        assert_eq!(p.family(), "groq");
+        assert_eq!(p.base_url, "https://api.groq.com/openai");
+    }
+
+    #[tokio::test]
+    async fn extra_headers_are_sent_on_post() {
+        use wiremock::matchers::{header, method};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(header("X-Brand", "harness"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let p = OpenAiProvider::with_compatible(
+            "id",
+            "sk",
+            server.uri(),
+            "openai",
+            vec![("X-Brand".into(), "harness".into())],
+        );
+        let resp = p.raw_post("/v1/anything", serde_json::json!({})).await;
+        assert!(resp.is_ok());
     }
 }
