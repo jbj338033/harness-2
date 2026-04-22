@@ -1,4 +1,8 @@
-// IMPLEMENTS: D-327
+// IMPLEMENTS: D-187, D-327
+pub mod delegation;
+
+pub use delegation::{DelegationError, DelegationScope, PrincipalId, SummonBody, validate_summon};
+
 use harness_auth::{PrivateKey, PublicKey, SignatureBytes};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -25,7 +29,7 @@ pub enum Verdict {
 
 /// What the user explicitly authorised — DNS hostnames, HTTP URL prefixes,
 /// and shell program names. Anything not in here is denied (fail-closed).
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ScopePolicy {
     #[serde(default)]
     pub allowed_dns: Vec<String>,
