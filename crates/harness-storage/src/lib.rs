@@ -3,6 +3,7 @@ pub mod backup;
 pub mod config;
 pub mod credentials;
 pub mod db;
+pub mod events;
 pub mod migrations;
 pub mod reader;
 pub mod reader_pool;

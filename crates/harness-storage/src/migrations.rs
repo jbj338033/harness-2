@@ -8,6 +8,7 @@ pub fn all() -> Migrations<'static> {
         M::up(MESSAGES_FTS),
         M::up(MESSAGES_KIND),
         M::up(WORKSPACE_TRUST),
+        M::up(EVENTS),
     ])
 }
 
@@ -133,6 +134,27 @@ ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat';
 CREATE INDEX idx_messages_kind ON messages(agent_id, kind);
 ";
 
+// IMPLEMENTS: D-041
+const EVENTS: &str = r"
+-- Strict append-only event log. Projections (messages / tool_calls) fold from
+-- this stream. No UPDATE / DELETE is performed by the storage API — only
+-- INSERT. Schema versioning of bodies lives inside `payload` JSON.
+CREATE TABLE events (
+    id              TEXT PRIMARY KEY,    -- uuidv7 hex
+    session_id      TEXT NOT NULL,
+    actor           TEXT NOT NULL,       -- 'human:user' | 'agent:<uuid>' | 'system:<name>' | 'tool:<name>'
+    kind            TEXT NOT NULL,       -- perceive | think | act | observe | remember | recall | plan | verify | trigger | cancel | revise | message_user | message_assistant | message_system | tool_call | tool_result
+    correlation_id  TEXT,                -- logical grouping (ToT branch, verify-retry, wave)
+    causation_id    TEXT,                -- parent event id that triggered this one
+    payload         TEXT NOT NULL,       -- JSON body, see SPECS-event-payloads.md
+    created_at      INTEGER NOT NULL     -- ms epoch
+) STRICT;
+CREATE INDEX idx_events_session ON events(session_id, created_at);
+CREATE INDEX idx_events_correlation ON events(correlation_id);
+CREATE INDEX idx_events_causation ON events(causation_id);
+CREATE INDEX idx_events_kind ON events(kind);
+";
+
 // IMPLEMENTS: D-205
 const WORKSPACE_TRUST: &str = r"
 -- Per-directory trust grants. Untrusted workspaces refuse to load
@@ -184,7 +206,7 @@ mod tests {
         let version: i64 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4, "expected migration version 4");
+        assert_eq!(version, 5, "expected migration version 5");
 
         for t in [
             "config",
@@ -197,6 +219,7 @@ mod tests {
             "memory",
             "approvals",
             "workspaces",
+            "events",
         ] {
             let count: i64 = conn
                 .query_row(
