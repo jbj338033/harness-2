@@ -52,6 +52,7 @@ members = [
     "crates/harness-data",
     "crates/harness-surface",
     "crates/harness-bias",
+    "crates/harness-control",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
