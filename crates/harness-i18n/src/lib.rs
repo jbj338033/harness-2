@@ -1,12 +1,17 @@
-// IMPLEMENTS: D-120, D-154, D-203, D-276
+// IMPLEMENTS: D-120, D-154, D-203, D-276, D-345
 //! Translation runtime. Built-in catalog covers ko/ja/en at launch and
 //! leaves zh/es/fr/de stubs that fall back to English until the human
 //! review lands (D-276). Lookups go through `t(locale, key, args)`. The
 //! key catalog itself lives in [`catalog`] and is the source-of-truth
 //! every CI gate checks against (D-154).
+//!
+//! [`bidi`] hosts the Trojan-Source-class control sanitizer the TUI uses
+//! before painting any model output (D-345).
 
+pub mod bidi;
 pub mod catalog;
 
+pub use bidi::{BidiLine, contains_bidi_controls, sanitize_for_display};
 pub use catalog::{CategoryError, KeyCategory, all_keys, category_of, keys_in_category};
 
 use serde::{Deserialize, Serialize};
