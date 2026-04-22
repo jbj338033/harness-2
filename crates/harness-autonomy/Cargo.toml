@@ -1,0 +1,17 @@
+[package]
+name = "harness-autonomy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Autonomy level selector, approval auto-map, ASL lock, level-scoped grants, signed consent ledger"
+
+[dependencies]
+harness-auth = { path = "../harness-auth" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
