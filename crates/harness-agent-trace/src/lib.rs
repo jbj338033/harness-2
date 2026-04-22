@@ -1,4 +1,6 @@
-// IMPLEMENTS: D-161
+// IMPLEMENTS: D-161, D-318
+pub mod git_sidecar;
+
 use harness_auth::{PrivateKey, PublicKey, SignatureBytes, generate_keypair};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
