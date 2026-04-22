@@ -1,0 +1,15 @@
+[package]
+name = "harness-carbon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Per-session CO2e estimator, region opt-in, batch time-shift to clean energy, carbon budget axis, EU EED Scope 3 cat.1 annual export"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
