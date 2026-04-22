@@ -33,6 +33,7 @@ members = [
     "crates/harness-i18n",
     "crates/harness-hooks",
     "crates/harness-settings",
+    "crates/harness-crisis",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
