@@ -1,0 +1,15 @@
+[package]
+name = "harness-medical"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Medical mode (axis off-default) — PHI 18 Safe Harbor detect, BAA gate, SaMD boundary, consent export"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
