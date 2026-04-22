@@ -1,0 +1,15 @@
+[package]
+name = "harness-bias"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Bias audit + FMEA release gate — bias CLI, NYC LL144 export, provider bias profile, skill lint, role bbq gate, periodic memory scan, README 3-line disclosure, RPN gate"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
