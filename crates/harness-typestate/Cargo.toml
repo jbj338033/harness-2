@@ -1,0 +1,17 @@
+[package]
+name = "harness-typestate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Compile-time invariants — Action<Unapproved/Approved>, Turn<Phase> — and proptest invariant suite"
+
+[dependencies]
+harness-cost = { path = "../harness-cost" }
+serde = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
