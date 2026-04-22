@@ -48,6 +48,7 @@ members = [
     "crates/harness-government",
     "crates/harness-robotics",
     "crates/harness-vulnerable",
+    "crates/harness-devops",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
