@@ -1,7 +1,10 @@
-// IMPLEMENTS: D-161, D-318, D-430
+// IMPLEMENTS: D-161, D-170, D-177, D-318, D-430
 pub mod archive;
 pub mod git_sidecar;
+mod keyring;
 pub mod retention;
+
+pub use keyring::{KeyId, Keyring, key_id_for_public};
 
 use harness_auth::{PrivateKey, PublicKey, SignatureBytes, generate_keypair};
 use serde::{Deserialize, Serialize};
@@ -37,6 +40,12 @@ pub struct TraceFile {
     pub payload: Value,
     pub public_key: PublicKey,
     pub signature: SignatureBytes,
+    /// 16-byte (32 hex) deterministic id of the writer pubkey. Lets a
+    /// reader pick the right active key when several have rotated through
+    /// the trust store. D-177b pinned the size at 16 bytes — 32 bits of
+    /// collision resistance was deemed too thin for ~30 year horizons.
+    #[serde(default)]
+    pub key_id: String,
 }
 
 /// `<untrusted source="trace">` envelope per D-152a — every importer must
@@ -85,12 +94,14 @@ pub fn export(
     let canon_payload = canonical_bytes(&spec_version, &session_id, &payload)?;
     let signature = sk.sign(&canon_payload);
     let public_key = sk.public();
+    let key_id = key_id_for_public(&public_key).0;
     let file = TraceFile {
         spec_version,
         session_id,
         payload,
         public_key,
         signature,
+        key_id,
     };
     let bytes = serde_json::to_vec_pretty(&file)?;
     std::fs::write(out, bytes)?;
@@ -265,12 +276,15 @@ mod tests {
         let payload = json!({});
         let canon = canonical_bytes("trace/0.0", "s", &payload).unwrap();
         let signature = sk.sign(&canon);
+        let pk = sk.public();
+        let key_id = key_id_for_public(&pk).0;
         let file = TraceFile {
             spec_version: "trace/0.0".into(),
             session_id: "s".into(),
             payload,
-            public_key: sk.public(),
+            public_key: pk,
             signature,
+            key_id,
         };
         std::fs::write(&out, serde_json::to_vec(&file).unwrap()).unwrap();
         let err = import(&out).unwrap_err();
@@ -308,6 +322,18 @@ mod tests {
             matches!(err, TraceError::SessionCollision(_)),
             "got {err:?}"
         );
+    }
+
+    #[test]
+    fn exported_trace_carries_matching_key_id() {
+        let dir = temp_dir();
+        let (sk, pk) = load_or_generate_key(dir.path()).unwrap();
+        let out = dir.path().join("trace.json");
+        export(&sk, CURRENT_SPEC_VERSION, "kid-test", json!({}), &out).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+        let file: TraceFile = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(file.key_id, key_id_for_public(&pk).0);
+        assert_eq!(file.key_id.len(), 32);
     }
 
     #[test]
