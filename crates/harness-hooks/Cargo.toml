@@ -1,0 +1,15 @@
+[package]
+name = "harness-hooks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Event hook registry with explicit 24-event surface, fan-out cap, and recursion guard"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }

@@ -31,6 +31,7 @@ members = [
     "crates/harness-llm-errors",
     "crates/harness-cost",
     "crates/harness-i18n",
+    "crates/harness-hooks",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
