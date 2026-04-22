@@ -1,12 +1,14 @@
-// IMPLEMENTS: D-025, D-041, D-164, D-171
+// IMPLEMENTS: D-025, D-041, D-164, D-171, D-308
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod alignment;
 pub mod capability;
 pub mod regex_library;
 pub mod same_action;
 
+pub use alignment::{ActOutcome, AlignmentVerdict, Claim, check, parse_claims};
 pub use capability::{Capability, is_destructive};
 pub use regex_library::{Pattern, scan};
 pub use same_action::{DetectorVerdict, SameActionDetector, hash_action};
