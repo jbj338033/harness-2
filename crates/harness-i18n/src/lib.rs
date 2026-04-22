@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-120, D-154, D-203, D-276, D-345
+// IMPLEMENTS: D-120, D-154, D-203, D-276, D-345, D-347
 //! Translation runtime. Built-in catalog covers ko/ja/en at launch and
 //! leaves zh/es/fr/de stubs that fall back to English until the human
 //! review lands (D-276). Lookups go through `t(locale, key, args)`. The
@@ -6,18 +6,21 @@
 //! every CI gate checks against (D-154).
 //!
 //! [`bidi`] hosts the Trojan-Source-class control sanitizer the TUI uses
-//! before painting any model output (D-345).
+//! before painting any model output (D-345). [`tokenizer`] provides the
+//! NFC + case-fold matcher behind the locale-aware skill registry (D-347).
 
 pub mod bidi;
 pub mod catalog;
+pub mod tokenizer;
 
 pub use bidi::{BidiLine, contains_bidi_controls, sanitize_for_display};
 pub use catalog::{CategoryError, KeyCategory, all_keys, category_of, keys_in_category};
+pub use tokenizer::{Lang, LocalizedSkill, fold, tokenize};
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Locale {
     En,

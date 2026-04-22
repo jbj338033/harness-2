@@ -11,3 +11,4 @@ description = "Translation key catalog for harness — en/ko/ja initially, zh/es
 
 [dependencies]
 serde = { workspace = true }
+unicode-normalization = "0.1"
