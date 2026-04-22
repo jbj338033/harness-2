@@ -1,0 +1,15 @@
+[package]
+name = "harness-vulnerable"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Vulnerable users mode (axis off-default) — VulnerabilityProfile, signal escalator, autonomy lock, dark-pattern CI gate, guardian 3-axis consent"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
