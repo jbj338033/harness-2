@@ -1,6 +1,6 @@
-use regex_lite::Regex;
+// IMPLEMENTS: D-065
+use crate::bash_ast::{self, BashVerdict};
 use std::path::Path;
-use std::sync::OnceLock;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SandboxPolicy {
@@ -15,26 +15,11 @@ pub struct Sandbox;
 impl Sandbox {
     #[must_use]
     pub fn evaluate_command(cmd: &str) -> SandboxPolicy {
-        let trimmed = cmd.trim();
-        if trimmed.is_empty() {
-            return SandboxPolicy::Allow;
+        match bash_ast::evaluate(cmd) {
+            BashVerdict::Allow => SandboxPolicy::Allow,
+            BashVerdict::Confirm(reason) => SandboxPolicy::Confirm { reason },
+            BashVerdict::Deny(reason) => SandboxPolicy::Deny { reason },
         }
-
-        for (pattern, reason) in deny_patterns() {
-            if pattern.is_match(trimmed) {
-                return SandboxPolicy::Deny {
-                    reason: (*reason).to_string(),
-                };
-            }
-        }
-        for (pattern, reason) in confirm_patterns() {
-            if pattern.is_match(trimmed) {
-                return SandboxPolicy::Confirm {
-                    reason: (*reason).to_string(),
-                };
-            }
-        }
-        SandboxPolicy::Allow
     }
 
     #[must_use]
@@ -61,63 +46,6 @@ impl Sandbox {
         }
         SandboxPolicy::Allow
     }
-}
-
-fn deny_patterns() -> &'static [(Regex, &'static str)] {
-    static CACHE: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
-    CACHE.get_or_init(|| {
-        vec![
-            (
-                Regex::new(
-                    r"(?:^|[\s;&|])rm\s+(-[rRfi]+\s+)*(-[rRfi]+\s+)?/\s*($|[^a-zA-Z0-9_./-])",
-                )
-                .unwrap(),
-                "destructive wipe of root filesystem",
-            ),
-            (
-                Regex::new(r"(?m)\bmkfs(\.\w+)?\b").unwrap(),
-                "filesystem creation",
-            ),
-            (
-                Regex::new(r"\bdd\b.*\bof=/dev/(sd|nvme|hd|disk)\w*").unwrap(),
-                "overwrite raw disk device",
-            ),
-            (
-                Regex::new(r":\s*\(\s*\)\s*\{.*:\|:\s*&\s*\}\s*;\s*:").unwrap(),
-                "fork bomb",
-            ),
-            (
-                Regex::new(r"\bchmod\b\s+-R\s+0?777\s+/").unwrap(),
-                "chmod 777 on filesystem root",
-            ),
-            (
-                Regex::new(r">\s*/dev/(sd|nvme|hd|disk)\w*").unwrap(),
-                "redirect to raw disk device",
-            ),
-        ]
-    })
-}
-
-fn confirm_patterns() -> &'static [(Regex, &'static str)] {
-    static CACHE: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
-    CACHE.get_or_init(|| {
-        vec![
-            (
-                Regex::new(r"\bgit\s+push\s+.*--force\b").unwrap(),
-                "git force push",
-            ),
-            (
-                Regex::new(r"\bgit\s+reset\s+--hard\b").unwrap(),
-                "git reset --hard",
-            ),
-            (Regex::new(r"^\s*sudo\b").unwrap(), "sudo execution"),
-            (
-                Regex::new(r"^\s*rm\s+-[rRfi]+\s+[^/]").unwrap(),
-                "recursive rm",
-            ),
-            (Regex::new(r"\bkill\s+-9\b").unwrap(), "force kill"),
-        ]
-    })
 }
 
 #[cfg(test)]

@@ -162,10 +162,7 @@ mod tests {
         // Same target line in different contexts should produce different anchors.
         let h_a = anchor_for("alpha\nbeta\ngamma\n", 2);
         let h_b = anchor_for("alpha\nbeta\ndelta\n", 2);
-        assert_ne!(
-            h_a, h_b,
-            "context window must influence anchor"
-        );
+        assert_ne!(h_a, h_b, "context window must influence anchor");
     }
 
     #[test]

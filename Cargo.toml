@@ -65,6 +65,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 # Utilities
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
 blake3 = "1"
+tree-sitter = "0.25"
+tree-sitter-bash = "0.25"
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 anyhow = "1"
 
