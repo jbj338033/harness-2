@@ -70,6 +70,16 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Keep changes focused, include a test, and match the house style in [`CLAUDE.md`](CLAUDE.md).
 
+## Out of scope
+
+To stay clear of EU AI Act Annex III "high-risk" classification, Harness is not designed for and is not authorised to be used as:
+
+- Decisioning in employment, credit, or public-safety contexts.
+- Biometric identification or categorisation.
+- A "deep" companion / emotional-bond chatbot.
+
+This is not legal advice. Operators deploying Harness in regulated jurisdictions must perform their own conformity assessment.
+
 ## License
 
 MIT
