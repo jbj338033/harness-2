@@ -138,17 +138,21 @@ fn diff_line_count(before: &str, after: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harness_tools_code::hashline::hash_line;
+    use harness_tools_code::hashline::hash_anchor;
     use tempfile::TempDir;
+
+    fn anchor_for(content: &str, line_one_based: usize) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        hash_anchor(&lines, line_one_based - 1)
+    }
 
     #[tokio::test]
     async fn hashline_edit_succeeds() {
         let t = TempDir::new().unwrap();
         let path = t.path().join("a.txt");
-        tokio::fs::write(&path, "alpha\nbeta\ngamma\n")
-            .await
-            .unwrap();
-        let h2 = hash_line("beta");
+        let body = "alpha\nbeta\ngamma\n";
+        tokio::fs::write(&path, body).await.unwrap();
+        let h2 = anchor_for(body, 2);
         EditTool
             .execute(
                 json!({
@@ -172,7 +176,7 @@ mod tests {
             .execute(
                 json!({
                     "path": "a.txt",
-                    "anchors": [{"line": "2:zz", "content": "B"}]
+                    "anchors": [{"line": "2:zzzzzzzz", "content": "B"}]
                 }),
                 &ToolContext::test(t.path()),
             )
