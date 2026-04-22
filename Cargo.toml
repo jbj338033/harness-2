@@ -25,6 +25,7 @@ members = [
     "crates/harness-proto-adapters",
     "crates/harness-agent-trace",
     "crates/harness-scope",
+    "crates/harness-sandbox",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
