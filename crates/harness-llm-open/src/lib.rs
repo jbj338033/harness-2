@@ -1,5 +1,11 @@
+// IMPLEMENTS: D-441
+mod backend;
+mod hardware;
 mod ndjson;
 mod request;
+
+pub use backend::{OPEN_BACKENDS, OpenBackend};
+pub use hardware::{HardwareProfile, detect_hardware, recommended_backend};
 
 use async_trait::async_trait;
 use harness_llm::{BoxStream, Provider};
@@ -8,40 +14,51 @@ use reqwest::{Client, header};
 use std::time::Duration;
 use tracing::debug;
 
-const API_BASE: &str = "http://localhost:11434";
+pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://localhost:11434";
 
-pub struct OllamaProvider {
+pub struct OpenProvider {
     id: String,
+    backend: OpenBackend,
     base_url: String,
     client: Client,
 }
 
-impl OllamaProvider {
+impl OpenProvider {
     pub fn new(id: impl Into<String>) -> Self {
-        Self::with_base_url(id, API_BASE)
+        Self::with_base_url(id, OpenBackend::Ollama, DEFAULT_OLLAMA_ENDPOINT)
     }
 
-    pub fn with_base_url(id: impl Into<String>, base_url: impl Into<String>) -> Self {
+    pub fn with_base_url(
+        id: impl Into<String>,
+        backend: OpenBackend,
+        base_url: impl Into<String>,
+    ) -> Self {
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .build()
             .expect("reqwest client");
         Self {
             id: id.into(),
+            backend,
             base_url: base_url.into(),
             client,
         }
     }
+
+    #[must_use]
+    pub fn backend(&self) -> OpenBackend {
+        self.backend
+    }
 }
 
 #[async_trait]
-impl Provider for OllamaProvider {
+impl Provider for OpenProvider {
     fn id(&self) -> &str {
         &self.id
     }
 
     fn family(&self) -> &'static str {
-        "ollama"
+        self.backend.family()
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ProviderError> {
@@ -151,7 +168,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let p = OllamaProvider::with_base_url("test", server.uri());
+        let p = OpenProvider::with_base_url("test", OpenBackend::Ollama, server.uri());
         let mut stream = p
             .chat(
                 "llama3:8b",
@@ -196,14 +213,21 @@ mod tests {
             .mount(&server)
             .await;
 
-        let p = OllamaProvider::with_base_url("t", server.uri());
+        let p = OpenProvider::with_base_url("t", OpenBackend::Ollama, server.uri());
         let models = p.list_models().await.unwrap();
         assert_eq!(models, vec!["llama3:8b", "codestral:22b"]);
     }
 
     #[test]
     fn family_id_is_ollama() {
-        let p = OllamaProvider::new("test");
+        let p = OpenProvider::new("test");
         assert_eq!(p.family(), "ollama");
+    }
+
+    #[test]
+    fn backend_can_be_overridden() {
+        let p = OpenProvider::with_base_url("lc", OpenBackend::LlamaCpp, "http://127.0.0.1:8080");
+        assert_eq!(p.backend(), OpenBackend::LlamaCpp);
+        assert_eq!(p.family(), "llamacpp");
     }
 }

@@ -12,7 +12,7 @@ members = [
     "crates/harness-llm-anthropic",
     "crates/harness-llm-openai",
     "crates/harness-llm-google",
-    "crates/harness-llm-ollama",
+    "crates/harness-llm-open",
     "crates/harness-tools",
     "crates/harness-tools-code",
     "crates/harness-tools-fs",

@@ -32,7 +32,7 @@ harness-llm-types = { path = "../harness-llm-types" }
 harness-llm-anthropic = { path = "../harness-llm-anthropic" }
 harness-llm-openai = { path = "../harness-llm-openai" }
 harness-llm-google = { path = "../harness-llm-google" }
-harness-llm-ollama = { path = "../harness-llm-ollama" }
+harness-llm-open = { path = "../harness-llm-open" }
 harness-tools = { path = "../harness-tools" }
 harness-tools-fs = { path = "../harness-tools-fs" }
 harness-tools-code = { path = "../harness-tools-code" }

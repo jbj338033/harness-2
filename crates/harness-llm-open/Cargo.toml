@@ -1,5 +1,5 @@
 [package]
-name = "harness-llm-ollama"
+name = "harness-llm-open"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish.workspace = true
-description = "Ollama local-daemon provider for harness"
+description = "Open-weights local provider — llama.cpp / ollama / mistral.rs / lm studio / vLLM / MLX / llamafile"
 
 [dependencies]
 harness-core = { path = "../harness-core" }

@@ -1,7 +1,7 @@
 use harness_llm::{Provider, ProviderPool, ProviderSlot};
 use harness_llm_anthropic::AnthropicProvider;
 use harness_llm_google::GoogleProvider;
-use harness_llm_ollama::OllamaProvider;
+use harness_llm_open::OpenProvider;
 use harness_llm_openai::OpenAiProvider;
 use harness_storage::{WriterHandle, credentials};
 use std::collections::BTreeSet;
@@ -78,7 +78,7 @@ pub fn build_pool(
         slots.push(ProviderSlot::new(provider));
     }
 
-    slots.push(ProviderSlot::new(Arc::new(OllamaProvider::new(
+    slots.push(ProviderSlot::new(Arc::new(OpenProvider::new(
         "ollama:local",
     ))));
 

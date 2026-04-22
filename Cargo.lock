@@ -99,6 +99,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayref"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
+
+[[package]]
+name = "arrayvec"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+
+[[package]]
 name = "asn1-rs"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -479,6 +491,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
+name = "blake3"
+version = "1.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d2d5991425dfd0785aed03aedcf0b321d61975c9b5b3689c774a2610ae0b51e"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "cc",
+ "cfg-if",
+ "constant_time_eq",
+ "cpufeatures 0.3.0",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -723,6 +749,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
+
+[[package]]
 name = "convert_case"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -791,6 +823,15 @@ name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
 ]
@@ -889,7 +930,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "curve25519-dalek-derive",
  "digest",
  "fiat-crypto",
@@ -1667,6 +1708,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-agent-trace"
+version = "0.1.0"
+dependencies = [
+ "harness-auth",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-auth"
 version = "0.1.0"
 dependencies = [
@@ -1703,6 +1755,7 @@ dependencies = [
  "harness-core",
  "harness-lifecycle",
  "harness-proto",
+ "harness-proto-adapters",
  "harness-storage",
  "harness-transport",
  "indicatif",
@@ -1757,6 +1810,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
+ "toml 0.9.12+spec-1.1.0",
  "tracing",
  "wiremock",
 ]
@@ -1798,6 +1852,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-llm-errors"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-llm-google"
 version = "0.1.0"
 dependencies = [
@@ -1818,7 +1881,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "harness-llm-ollama"
+name = "harness-llm-open"
 version = "0.1.0"
 dependencies = [
  "async-stream",
@@ -1915,6 +1978,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-proto-adapters"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "harness-mcp",
+ "serde",
+]
+
+[[package]]
 name = "harness-rpc"
 version = "0.1.0"
 dependencies = [
@@ -1928,6 +2000,39 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "harness-runtime-lima"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-sandbox"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-scope"
+version = "0.1.0"
+dependencies = [
+ "harness-auth",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "url",
 ]
 
 [[package]]
@@ -1985,7 +2090,6 @@ dependencies = [
  "async-trait",
  "harness-core",
  "harness-storage",
- "regex-lite",
  "rusqlite",
  "serde",
  "serde_json",
@@ -1993,6 +2097,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tree-sitter",
+ "tree-sitter-bash",
 ]
 
 [[package]]
@@ -2036,6 +2142,7 @@ dependencies = [
 name = "harness-tools-code"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "harness-tools",
  "serde",
  "serde_json",
@@ -2198,6 +2305,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-verify"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "harness-worktree"
 version = "0.1.0"
 dependencies = [
@@ -2226,7 +2345,7 @@ dependencies = [
  "harness-llm",
  "harness-llm-anthropic",
  "harness-llm-google",
- "harness-llm-ollama",
+ "harness-llm-open",
  "harness-llm-openai",
  "harness-llm-types",
  "harness-mcp",
@@ -4094,6 +4213,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -4164,7 +4284,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 
@@ -4175,7 +4295,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 
@@ -4303,6 +4423,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4394,7 +4520,7 @@ dependencies = [
  "cfg-expr",
  "heck",
  "pkg-config",
- "toml",
+ "toml 1.1.2+spec-1.1.0",
  "version-compare",
 ]
 
@@ -4572,6 +4698,21 @@ dependencies = [
 
 [[package]]
 name = "toml"
+version = "0.9.12+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf92845e79fc2e2def6a5d828f0801e29a2f8acc037becc5ab08595c7d5e9863"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime 0.7.5+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 0.7.15",
+]
+
+[[package]]
+name = "toml"
 version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81f3d15e84cbcd896376e6730314d59fb5a87f31e4b038454184435cd57defee"
@@ -4579,10 +4720,19 @@ dependencies = [
  "indexmap",
  "serde_core",
  "serde_spanned",
- "toml_datetime",
+ "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
  "toml_writer",
  "winnow 1.0.1",
+]
+
+[[package]]
+name = "toml_datetime"
+version = "0.7.5+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92e1cfed4a3038bc5a127e35a2d360f145e1f4b971b551a2ba5fd7aedf7e1347"
+dependencies = [
+ "serde_core",
 ]
 
 [[package]]
@@ -4601,7 +4751,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b59c4d22ed448339746c59b905d24568fcbb3ab65a500494f7b8c3e97739f2b"
 dependencies = [
  "indexmap",
- "toml_datetime",
+ "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
  "winnow 1.0.1",
 ]
@@ -4728,6 +4878,36 @@ dependencies = [
  "tracing-core",
  "tracing-log",
 ]
+
+[[package]]
+name = "tree-sitter"
+version = "0.25.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78f873475d258561b06f1c595d93308a7ed124d9977cb26b148c2084a4a3cc87"
+dependencies = [
+ "cc",
+ "regex",
+ "regex-syntax",
+ "serde_json",
+ "streaming-iterator",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-bash"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e5ec769279cc91b561d3df0d8a5deb26b0ad40d183127f409494d6d8fc53062"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-language"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
 
 [[package]]
 name = "try-lock"
