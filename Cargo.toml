@@ -29,6 +29,7 @@ members = [
     "crates/harness-runtime-lima",
     "crates/harness-verify",
     "crates/harness-llm-errors",
+    "crates/harness-cost",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
