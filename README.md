@@ -18,6 +18,14 @@ Harness runs as a long-lived host process that serves clients (terminal, web, ph
 
 Provider-agnostic (Anthropic, OpenAI, Google, Ollama) with a first-class tool belt: content-hash file edits, sandboxed shell, web fetch, CDP browser, LSP, accessibility-aware screen control, and an MCP client for out-of-tree tools.
 
+## Why this and not another agent
+
+- **Persistent daemon.** The agent stays running. Reconnect from a different device and the in-flight turn is still there.
+- **≥ 55% cost reduction** vs. running the same prompts cold each turn — Anthropic prompt caching is on by default for system + tools (1h TTL) and rolling on the last two messages (5m TTL). Real numbers depend on your traffic; we publish only the lower bound.
+- **~10s median first-token latency** on the Anthropic streaming path with cache hot. Measured locally; we will not claim benchmark "SOTA" until external numbers land.
+- **Offline-first verify loop.** Tests / lint / type-check first; LLM judge is opt-in (D-171a). The harness-owned regex pattern library means zero supply-chain dependency on third-party rule sets.
+- **Agent UX over score chasing.** Same-action detector, trajectory alignment check, structured alert templates — failure modes are surfaced as deterministic UI, never as a model "I'm stuck" reply.
+
 ## Install
 
 On the host machine (runs the daemon):

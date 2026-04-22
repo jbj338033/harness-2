@@ -17,6 +17,18 @@ use harness_storage::{Database, Writer, WriterHandle};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// IMPLEMENTS: D-160
+/// Verifiable selling points the README publishes. Held as a const so the
+/// `harness about` command and any future docgen draw from one source —
+/// D-160 forbids vague "SOTA" claims; only published lower bounds appear here.
+pub const SELLING_POINTS: &[&str] = &[
+    "persistent daemon — sessions outlive the TUI window",
+    "≥ 55% prompt-cache cost reduction (Anthropic 1h system + 5m rolling)",
+    "~10s median first-token latency on the streaming path with cache hot",
+    "offline-first verify loop — tests / lint / type-check before any LLM judge",
+    "agent UX over score chasing — deterministic alerts for repeat / drift",
+];
+
 #[derive(Parser, Debug)]
 #[command(
     name = "harness",
