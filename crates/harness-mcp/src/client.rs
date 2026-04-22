@@ -12,6 +12,8 @@ use tokio::sync::{Mutex, oneshot};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
+pub const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
+
 #[derive(Debug, Error)]
 pub enum McpError {
     #[error("spawn: {0}")]
@@ -36,12 +38,13 @@ pub struct McpServerConfig {
     pub cwd: Option<std::path::PathBuf>,
 }
 
+// IMPLEMENTS: D-009
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerTool {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    #[serde(default)]
+    #[serde(default, rename = "inputSchema")]
     pub input_schema: Value,
 }
 
@@ -194,11 +197,12 @@ impl ManagedServer {
         }
     }
 
+    // IMPLEMENTS: D-009
     async fn initialize(&self) -> Result<(), McpError> {
         self.request(
             "initialize",
             json!({
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
                 "clientInfo": {"name": "harness", "version": env!("CARGO_PKG_VERSION")},
             }),
@@ -208,6 +212,7 @@ impl ManagedServer {
         Ok(())
     }
 
+    // IMPLEMENTS: D-073
     async fn list_tools(&self) -> Result<Vec<ServerTool>, McpError> {
         let v = self.request("tools/list", json!({})).await?;
         let tools = v
@@ -218,6 +223,25 @@ impl ManagedServer {
         let mut out = Vec::with_capacity(tools.len());
         for t in tools {
             let tool: ServerTool = serde_json::from_value(t)?;
+            // Quarantine tools whose schema breaks the D-073 envelope —
+            // serialize the validation off the async runtime to avoid
+            // blocking other clients on a malicious payload.
+            let schema = tool.input_schema.clone();
+            let name = tool.name.clone();
+            let server_name = self.config.name.clone();
+            let validation =
+                tokio::task::spawn_blocking(move || crate::schema_validator::validate(&schema))
+                    .await
+                    .map_err(|e| McpError::Server(format!("validator join: {e}")))?;
+            if let Err(e) = validation {
+                warn!(
+                    server = %server_name,
+                    tool = %name,
+                    error = %e,
+                    "quarantined mcp tool: invalid inputSchema"
+                );
+                continue;
+            }
             out.push(tool);
         }
         Ok(out)
