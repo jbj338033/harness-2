@@ -162,22 +162,60 @@ fn apply_completion(app: &mut App) {
     }
 }
 
+// IMPLEMENTS: D-206
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApprovalChoice {
+    AllowOnce,
+    AllowSession,
+    AllowGlobal,
+    DenyOnce,
+    StopTurn,
+}
+
+impl ApprovalChoice {
+    fn from_key(k: KeyCode) -> Option<Self> {
+        match k {
+            KeyCode::Char('1' | 'y' | 'Y') => Some(Self::AllowOnce),
+            KeyCode::Char('2' | 's' | 'S') => Some(Self::AllowSession),
+            KeyCode::Char('3' | 'a' | 'A') => Some(Self::AllowGlobal),
+            KeyCode::Char('4' | 'n' | 'N') => Some(Self::DenyOnce),
+            KeyCode::Char('5' | 'c' | 'C') | KeyCode::Esc => Some(Self::StopTurn),
+            _ => None,
+        }
+    }
+
+    fn decision(self) -> &'static str {
+        match self {
+            Self::AllowOnce => "allow",
+            Self::AllowSession => "allow_session",
+            Self::AllowGlobal => "allow_global",
+            Self::DenyOnce | Self::StopTurn => "deny",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::AllowOnce => "allow once",
+            Self::AllowSession => "allow session",
+            Self::AllowGlobal => "allow always",
+            Self::DenyOnce => "deny",
+            Self::StopTurn => "stop turn",
+        }
+    }
+}
+
 async fn handle_approval_key(
     app: &mut App,
     writer: Option<&mut OwnedWriteHalf>,
     pending: ApprovalRequest,
     k: KeyEvent,
 ) -> Result<bool> {
-    let decision = match k.code {
-        KeyCode::Char('y' | 'Y') => Some("allow"),
-        KeyCode::Char('n' | 'N') => Some("deny"),
-        KeyCode::Char('a' | 'A') => Some("allow_session"),
-        _ => None,
-    };
-    let Some(decision) = decision else {
+    let Some(choice) = ApprovalChoice::from_key(k.code) else {
         return Ok(false);
     };
     app.pending_approval = None;
+    let decision = choice.decision();
+    let agent_id = app.agent_id.clone();
     if let Some(w) = writer {
         let id = app.next_id();
         let req = Request::new(
@@ -190,8 +228,15 @@ async fn handle_approval_key(
             })),
         );
         write_request(w, &req).await?;
+        if matches!(choice, ApprovalChoice::StopTurn)
+            && let Some(aid) = agent_id
+        {
+            let id = app.next_id();
+            let req = Request::new(id, "v1.chat.cancel", Some(json!({ "agent_id": aid })));
+            write_request(w, &req).await?;
+        }
     }
-    app.push_system(format!("approval: {decision}"));
+    app.push_system(format!("approval: {}", choice.label()));
     Ok(false)
 }
 
@@ -361,6 +406,70 @@ mod tests {
             pattern: "rm -rf".into(),
         });
         handle_key(&mut app, None, key(KeyCode::Char('y'), KeyModifiers::NONE))
+            .await
+            .unwrap();
+        assert!(app.pending_approval.is_none());
+    }
+
+    #[test]
+    fn approval_choice_maps_every_documented_key() {
+        let cases = [
+            (KeyCode::Char('1'), ApprovalChoice::AllowOnce),
+            (KeyCode::Char('y'), ApprovalChoice::AllowOnce),
+            (KeyCode::Char('2'), ApprovalChoice::AllowSession),
+            (KeyCode::Char('s'), ApprovalChoice::AllowSession),
+            (KeyCode::Char('3'), ApprovalChoice::AllowGlobal),
+            (KeyCode::Char('a'), ApprovalChoice::AllowGlobal),
+            (KeyCode::Char('4'), ApprovalChoice::DenyOnce),
+            (KeyCode::Char('n'), ApprovalChoice::DenyOnce),
+            (KeyCode::Char('5'), ApprovalChoice::StopTurn),
+            (KeyCode::Char('c'), ApprovalChoice::StopTurn),
+            (KeyCode::Esc, ApprovalChoice::StopTurn),
+        ];
+        for (code, expected) in cases {
+            assert_eq!(ApprovalChoice::from_key(code), Some(expected));
+        }
+    }
+
+    #[test]
+    fn approval_choice_ignores_unrelated_keys() {
+        assert!(ApprovalChoice::from_key(KeyCode::Char('z')).is_none());
+        assert!(ApprovalChoice::from_key(KeyCode::Tab).is_none());
+        assert!(ApprovalChoice::from_key(KeyCode::Enter).is_none());
+    }
+
+    #[test]
+    fn approval_decisions_match_daemon_vocabulary() {
+        assert_eq!(ApprovalChoice::AllowOnce.decision(), "allow");
+        assert_eq!(ApprovalChoice::AllowSession.decision(), "allow_session");
+        assert_eq!(ApprovalChoice::AllowGlobal.decision(), "allow_global");
+        assert_eq!(ApprovalChoice::DenyOnce.decision(), "deny");
+        assert_eq!(ApprovalChoice::StopTurn.decision(), "deny");
+    }
+
+    #[tokio::test]
+    async fn approval_deny_clears_pending() {
+        let mut app = App::new("0.1.0");
+        app.pending_approval = Some(ApprovalRequest {
+            id: "a1".into(),
+            description: "rm".into(),
+            pattern: "rm -rf".into(),
+        });
+        handle_key(&mut app, None, key(KeyCode::Char('n'), KeyModifiers::NONE))
+            .await
+            .unwrap();
+        assert!(app.pending_approval.is_none());
+    }
+
+    #[tokio::test]
+    async fn approval_stop_turn_clears_pending() {
+        let mut app = App::new("0.1.0");
+        app.pending_approval = Some(ApprovalRequest {
+            id: "a1".into(),
+            description: "rm".into(),
+            pattern: "rm -rf".into(),
+        });
+        handle_key(&mut app, None, key(KeyCode::Esc, KeyModifiers::NONE))
             .await
             .unwrap();
         assert!(app.pending_approval.is_none());

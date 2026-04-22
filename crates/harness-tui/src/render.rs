@@ -377,6 +377,7 @@ fn draw_overlay(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(para, popup);
 }
 
+// IMPLEMENTS: D-206
 fn draw_approval(f: &mut Frame, area: Rect, app: &App) {
     let Some(ApprovalRequest {
         description,
@@ -386,7 +387,7 @@ fn draw_approval(f: &mut Frame, area: Rect, app: &App) {
     else {
         return;
     };
-    let popup = centered(area, 60, 30);
+    let popup = centered(area, 60, 35);
     f.render_widget(Clear, popup);
     let text = vec![
         Line::from(vec![
@@ -400,7 +401,26 @@ fn draw_approval(f: &mut Frame, area: Rect, app: &App) {
             Span::raw(pattern.clone()),
         ]),
         Line::from(""),
-        Line::from("[y] allow   [n] deny   [a] allow this pattern for session"),
+        Line::from(vec![
+            Span::styled("[1] y  ", primary()),
+            Span::raw("allow once"),
+        ]),
+        Line::from(vec![
+            Span::styled("[2] s  ", primary()),
+            Span::raw("allow this session"),
+        ]),
+        Line::from(vec![
+            Span::styled("[3] a  ", primary()),
+            Span::raw("allow always (persisted)"),
+        ]),
+        Line::from(vec![
+            Span::styled("[4] n  ", primary()),
+            Span::raw("deny once"),
+        ]),
+        Line::from(vec![
+            Span::styled("[5] c  ", primary()),
+            Span::raw("stop turn (deny + cancel agent)"),
+        ]),
     ];
     let title = Span::styled("approval required", primary().add_modifier(Modifier::BOLD));
     let block = Block::default()
