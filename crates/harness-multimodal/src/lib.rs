@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-156, D-278, D-279, D-281, D-282
+// IMPLEMENTS: D-156, D-278, D-279, D-280, D-281, D-282, D-283, D-284, D-285
 //! Multimodal attachment types and the safety scaffolding around them.
 //!
 //! - [`Attachment`] is a first-class atom in the event payload — never
@@ -15,11 +15,22 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+pub mod attachment_index;
+pub mod computer_use;
+pub mod cost_subcap;
+pub mod stt;
 pub mod vpi;
 
+pub use attachment_index::{AttachmentIndex, IndexRow};
+pub use computer_use::{ComputerAction, MouseButton, ResolutionTier};
+pub use cost_subcap::{
+    DEFAULT_VISION_TURN_CAP_USD, DetailLevel, SubcapVerdict, VisionSubcap,
+    classify as classify_vision_subcap,
+};
+pub use stt::{SttBackend, SttConfig};
 pub use vpi::{TrustLabel, VpiVerdict, classify_screen_capture, quarantine_session};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct BlobId(pub String);
 
 impl BlobId {
