@@ -1,0 +1,15 @@
+[package]
+name = "harness-proto-adapters"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Common ProtocolAdapter trait — drives MCP, ACP, A2A, and Agent Trace through one surface"
+
+[dependencies]
+harness-mcp = { path = "../harness-mcp" }
+serde = { workspace = true }
+blake3 = { workspace = true }

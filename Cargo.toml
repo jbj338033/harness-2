@@ -22,6 +22,7 @@ members = [
     "crates/harness-tools-computer",
     "crates/harness-tools-lsp",
     "crates/harness-mcp",
+    "crates/harness-proto-adapters",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",

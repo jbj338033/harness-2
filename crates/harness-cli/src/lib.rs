@@ -117,6 +117,11 @@ pub enum Command {
         #[command(subcommand)]
         cmd: DbCmd,
     },
+    /// inspect protocol versions and detect drift against the manifest
+    Protocol {
+        #[command(subcommand)]
+        cmd: ProtocolCmd,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -218,6 +223,16 @@ pub enum WorkspaceCmd {
     List,
 }
 
+// IMPLEMENTS: D-316
+#[derive(Subcommand, Debug)]
+pub enum ProtocolCmd {
+    /// list every protocol adapter the binary knows about
+    #[command(visible_alias = "ls")]
+    List,
+    /// compare runtime adapters against the pinned manifest; non-zero exit on drift
+    Check,
+}
+
 // IMPLEMENTS: D-080
 #[derive(Subcommand, Debug)]
 pub enum DbCmd {
@@ -263,6 +278,68 @@ pub async fn run(cli: Cli) -> Result<()> {
         Command::Device { cmd } => cmd_device(cmd).await,
         Command::Workspace { cmd } => cmd_workspace(cmd).await,
         Command::Db { cmd } => cmd_db(cmd).await,
+        Command::Protocol { cmd } => cmd_protocol(cmd),
+    }
+}
+
+// IMPLEMENTS: D-316
+fn cmd_protocol(cmd: ProtocolCmd) -> Result<()> {
+    let adapters = harness_proto_adapters::builtin_adapters();
+    let refs: Vec<&dyn harness_proto_adapters::ProtocolAdapter> =
+        adapters.iter().map(std::convert::AsRef::as_ref).collect();
+
+    match cmd {
+        ProtocolCmd::List => {
+            style::section("Protocols");
+            println!();
+            let rows: Vec<Vec<String>> = refs
+                .iter()
+                .map(|a| {
+                    let id = a.identity();
+                    vec![id.name, id.current_version, id.schema_hash]
+                })
+                .collect();
+            table::print(&["Name", "Version", "Schema hash"], &rows);
+            Ok(())
+        }
+        ProtocolCmd::Check => {
+            let manifest = harness_proto_adapters::manifest();
+            let report = harness_proto_adapters::check(&manifest, &refs);
+            let mut drift = false;
+            style::section("Protocol drift check");
+            println!();
+            for (name, status) in &report {
+                match status {
+                    harness_proto_adapters::DriftStatus::InSync => {
+                        style::success(format!("{name}: in sync"));
+                    }
+                    harness_proto_adapters::DriftStatus::VersionDrift { expected, actual } => {
+                        drift = true;
+                        style::failure(format!(
+                            "{name}: version drift — expected {expected}, runtime {actual}"
+                        ));
+                    }
+                    harness_proto_adapters::DriftStatus::SchemaDrift {
+                        version,
+                        expected_hash,
+                        actual_hash,
+                    } => {
+                        drift = true;
+                        style::failure(format!(
+                            "{name}: schema drift at {version} — manifest {expected_hash}, runtime {actual_hash}"
+                        ));
+                    }
+                }
+            }
+            println!();
+            if drift {
+                style::hint(
+                    "auto-upgrade is intentionally disabled — bump the manifest after manual review",
+                );
+                bail!("protocol drift detected");
+            }
+            Ok(())
+        }
     }
 }
 
