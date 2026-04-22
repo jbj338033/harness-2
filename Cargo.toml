@@ -55,6 +55,7 @@ members = [
     "crates/harness-control",
     "crates/harness-agi",
     "crates/harness-carbon",
+    "crates/harness-distributed",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
