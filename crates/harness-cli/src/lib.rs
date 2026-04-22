@@ -1,4 +1,6 @@
+// IMPLEMENTS: D-202, D-207, D-208
 mod auth_login;
+mod config_explain;
 mod daemon_rpc;
 mod progress;
 mod style;
@@ -27,7 +29,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
     override_usage = "harness [options]\n       harness [options] <command>",
     after_help = "Examples:\n  \
                   harness                attach to running daemon (tui)\n  \
-                  harness setup          first-run setup\n  \
+                  harness init           first-run setup\n  \
                   harness auth login     sign in a provider\n  \
                   harness pair           issue a pairing code",
     arg_required_else_help = false,
@@ -40,6 +42,10 @@ pub struct Cli {
 
     #[command(flatten)]
     pub session: SessionFlags,
+
+    /// disable colors and unicode glyphs (for ci, logs, screen readers)
+    #[arg(long, global = true)]
+    pub plain: bool,
 }
 
 #[derive(clap::Args, Debug, Default)]
@@ -56,7 +62,7 @@ pub struct SessionFlags {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// interactive first-run setup
-    Setup,
+    Init,
     /// daemon and devices summary
     Status,
     /// end-to-end health check
@@ -136,6 +142,11 @@ pub enum ConfigCmd {
     Remove {
         key: String,
     },
+    /// describe a config key — default, effect, summary, example
+    Explain {
+        /// omit to list every documented key
+        key: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -189,11 +200,12 @@ pub fn parse() -> Cli {
 }
 
 pub async fn run(cli: Cli) -> Result<()> {
+    style::set_plain(cli.plain);
     let Some(command) = cli.command else {
         bail!("no subcommand given (run with --help)");
     };
     match command {
-        Command::Setup => cmd_setup().await,
+        Command::Init => cmd_init().await,
         Command::Status => cmd_status(),
         Command::Doctor => cmd_doctor().await,
         Command::Pair => cmd_pair().await,
@@ -222,9 +234,9 @@ fn open_db() -> Result<(DataDir, Database, WriterHandle)> {
 
 const SETUP_PROVIDERS: &[&str] = &["anthropic", "openai", "google", "ollama"];
 
-async fn cmd_setup() -> Result<()> {
+async fn cmd_init() -> Result<()> {
     let theme = style::dialoguer_theme();
-    style::section(&format!("harness setup {VERSION}"));
+    style::section(&format!("harness init {VERSION}"));
     println!();
     let (dd, _db, writer) = open_db()?;
     let home = std::env::var("HOME").unwrap_or_default();
@@ -705,8 +717,44 @@ async fn cmd_config(cmd: ConfigCmd) -> Result<()> {
             }
             style::success(format!("removed {key_msg}"));
         }
+        ConfigCmd::Explain { key } => match key {
+            None => {
+                style::section("Documented config keys");
+                println!();
+                let rows: Vec<Vec<String>> = config_explain::all()
+                    .iter()
+                    .map(|e| vec![e.key.to_string(), e.summary.to_string()])
+                    .collect();
+                table::print(&["Key", "Summary"], &rows);
+                style::hint("run `harness config explain <key>` for details");
+            }
+            Some(k) => print_explain(&k),
+        },
     }
     Ok(())
+}
+
+fn print_explain(key: &str) {
+    if let Some(entry) = config_explain::lookup(key) {
+        style::section(&format!("config {}", entry.key));
+        println!();
+        style::kv("default", entry.default, 14);
+        style::kv("effect", entry.takes_effect, 14);
+        style::kv("example", entry.example, 14);
+        println!();
+        println!("  {}", entry.summary);
+        return;
+    }
+    if let Some((prefix, format, summary)) = config_explain::prefix_hint(key) {
+        style::section(&format!("config namespace {prefix}*"));
+        println!();
+        style::kv("format", *format, 14);
+        println!();
+        println!("  {summary}");
+        return;
+    }
+    style::failure(format!("no documentation for {key}"));
+    style::hint("run `harness config explain` to list every documented key");
 }
 
 async fn cmd_auth(cmd: AuthCmd) -> Result<()> {

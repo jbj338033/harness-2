@@ -1,8 +1,10 @@
+// IMPLEMENTS: D-202
 use anstyle::{AnsiColor, RgbColor, Style};
 use dialoguer::console::{Color, Style as ConsoleStyle, style};
 use dialoguer::theme::ColorfulTheme;
 use std::fmt::Display;
 use std::io::IsTerminal;
+use std::sync::OnceLock;
 
 pub const PRIMARY: RgbColor = RgbColor(183, 167, 235);
 pub const PRIMARY_DIM: RgbColor = RgbColor(140, 125, 185);
@@ -10,8 +12,22 @@ pub const PRIMARY_DIM: RgbColor = RgbColor(140, 125, 185);
 const TC_PRIMARY: Color = Color::TrueColor(183, 167, 235);
 const TC_PRIMARY_DIM: Color = Color::TrueColor(140, 125, 185);
 
+static PLAIN: OnceLock<bool> = OnceLock::new();
+
+pub fn set_plain(plain: bool) {
+    PLAIN.set(plain).ok();
+}
+
+#[must_use]
+pub fn plain() -> bool {
+    *PLAIN.get().unwrap_or(&false)
+}
+
 #[must_use]
 pub fn supports_color() -> bool {
+    if plain() {
+        return false;
+    }
     if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
         return false;
     }
@@ -20,6 +36,9 @@ pub fn supports_color() -> bool {
 
 #[must_use]
 pub fn supports_unicode() -> bool {
+    if plain() {
+        return false;
+    }
     if std::env::var_os("NO_UNICODE").is_some_and(|v| !v.is_empty()) {
         return false;
     }
