@@ -15,6 +15,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["process", "io-util", "macros", "rt"] }
 async-trait = "0.1"
+blake3 = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

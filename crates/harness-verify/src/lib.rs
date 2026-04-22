@@ -1,13 +1,15 @@
-// IMPLEMENTS: D-025, D-041, D-171
+// IMPLEMENTS: D-025, D-041, D-164, D-171
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod capability;
 pub mod regex_library;
+pub mod same_action;
 
 pub use capability::{Capability, is_destructive};
 pub use regex_library::{Pattern, scan};
+pub use same_action::{DetectorVerdict, SameActionDetector, hash_action};
 
 #[derive(Debug, Error)]
 pub enum VerifyError {
