@@ -26,6 +26,7 @@ members = [
     "crates/harness-agent-trace",
     "crates/harness-scope",
     "crates/harness-sandbox",
+    "crates/harness-runtime-lima",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
