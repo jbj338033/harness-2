@@ -1,0 +1,16 @@
+[package]
+name = "harness-government"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Government mode (axis off-default) — RecordPolicy, autonomy cap, OMB M-25-22 frontmatter, AIA export, FOIA hash-chain ledger, due-process gate, citizen disclosure"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }

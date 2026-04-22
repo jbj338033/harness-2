@@ -45,6 +45,7 @@ members = [
     "crates/harness-medical",
     "crates/harness-finance",
     "crates/harness-education",
+    "crates/harness-government",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
