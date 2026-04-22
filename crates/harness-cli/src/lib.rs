@@ -112,6 +112,11 @@ pub enum Command {
         #[command(subcommand)]
         cmd: WorkspaceCmd,
     },
+    /// inspect or migrate the local database
+    Db {
+        #[command(subcommand)]
+        cmd: DbCmd,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -213,6 +218,22 @@ pub enum WorkspaceCmd {
     List,
 }
 
+// IMPLEMENTS: D-080
+#[derive(Subcommand, Debug)]
+pub enum DbCmd {
+    /// show schema version and pending migration count
+    Status,
+    /// apply pending migrations after backing the db up
+    Migrate {
+        /// list pending migrations without applying
+        #[arg(long)]
+        dry_run: bool,
+        /// restore the previous backup instead of migrating
+        #[arg(long)]
+        restore: bool,
+    },
+}
+
 #[must_use]
 pub fn parse() -> Cli {
     Cli::parse()
@@ -241,6 +262,7 @@ pub async fn run(cli: Cli) -> Result<()> {
         Command::Mcp { cmd } => cmd_mcp(cmd).await,
         Command::Device { cmd } => cmd_device(cmd).await,
         Command::Workspace { cmd } => cmd_workspace(cmd).await,
+        Command::Db { cmd } => cmd_db(cmd).await,
     }
 }
 
@@ -1088,6 +1110,135 @@ async fn cmd_workspace(cmd: WorkspaceCmd) -> Result<()> {
             table::print(&["Path", "Trusted"], &rows);
         }
     }
+    Ok(())
+}
+
+// IMPLEMENTS: D-080
+async fn cmd_db(cmd: DbCmd) -> Result<()> {
+    let dd = DataDir::init(data_dir()).context("init data dir")?;
+    let db_path = dd.db_path();
+    match cmd {
+        DbCmd::Status => db_status(&db_path),
+        DbCmd::Migrate { dry_run, restore } => db_migrate(&db_path, dry_run, restore).await,
+    }
+}
+
+fn backup_path_for(db: &std::path::Path) -> std::path::PathBuf {
+    db.with_extension("backup")
+}
+
+fn db_status(db_path: &std::path::Path) -> Result<()> {
+    let mut conn = rusqlite::Connection::open(db_path).context("open db")?;
+    harness_storage::db::configure(&mut conn).context("configure db")?;
+    let migrations = harness_storage::migrations::all();
+    let current: usize = migrations
+        .current_version(&conn)
+        .map_err(|e| anyhow!("{e}"))?
+        .into();
+    let pending = migrations
+        .pending_migrations(&conn)
+        .map_err(|e| anyhow!("{e}"))?;
+    let target = current + usize::try_from(pending.max(0)).unwrap_or(0);
+    let backup = backup_path_for(db_path);
+
+    style::section("Database");
+    println!();
+    style::kv("path", display_path(db_path), 12);
+    style::kv("current", current, 12);
+    style::kv("target", target, 12);
+    style::kv("pending", pending, 12);
+    if backup.exists() {
+        style::kv("backup", display_path(&backup), 12);
+        style::hint(
+            "a backup exists from a previous migrate — `harness db migrate --restore` to roll back",
+        );
+    }
+    Ok(())
+}
+
+async fn db_migrate(db_path: &std::path::Path, dry_run: bool, restore: bool) -> Result<()> {
+    let backup = backup_path_for(db_path);
+
+    if restore {
+        if !backup.exists() {
+            bail!("no backup at {}", display_path(&backup));
+        }
+        std::fs::rename(&backup, db_path).context("restore backup")?;
+        style::success(format!("restored from {}", display_path(&backup)));
+        return Ok(());
+    }
+
+    if backup.exists() {
+        let theme = style::dialoguer_theme();
+        let restore_now = Confirm::with_theme(&theme)
+            .with_prompt(format!(
+                "stale backup at {} — previous migrate may have crashed; restore it?",
+                display_path(&backup)
+            ))
+            .default(true)
+            .interact()?;
+        if restore_now {
+            std::fs::rename(&backup, db_path).context("restore backup")?;
+            style::success("restored");
+            return Ok(());
+        }
+        std::fs::remove_file(&backup).context("remove stale backup")?;
+        style::hint("removed stale backup");
+    }
+
+    let mut conn = rusqlite::Connection::open(db_path).context("open db")?;
+    harness_storage::db::configure(&mut conn).context("configure db")?;
+    let migrations = harness_storage::migrations::all();
+    let current: usize = migrations
+        .current_version(&conn)
+        .map_err(|e| anyhow!("{e}"))?
+        .into();
+    let pending = migrations
+        .pending_migrations(&conn)
+        .map_err(|e| anyhow!("{e}"))?;
+
+    style::section("Database migrations");
+    println!();
+    style::kv("path", display_path(db_path), 12);
+    style::kv("current", current, 12);
+    style::kv("pending", pending, 12);
+
+    if pending <= 0 {
+        println!();
+        style::info("nothing to do");
+        return Ok(());
+    }
+
+    if dry_run {
+        println!();
+        style::hint("dry-run: nothing applied");
+        return Ok(());
+    }
+
+    println!();
+    style::section("Backing up");
+    harness_storage::backup::run(&conn, &backup).map_err(|e| anyhow!("{e}"))?;
+    style::success(format!("backup at {}", display_path(&backup)));
+    drop(conn);
+
+    let mut conn = rusqlite::Connection::open(db_path).context("reopen db for migration")?;
+    harness_storage::db::configure(&mut conn).context("configure db")?;
+    if let Err(e) = migrations.to_latest(&mut conn) {
+        style::failure(format!("migration failed: {e}"));
+        style::hint(format!(
+            "rerun with `--restore` to roll back to backup at {}",
+            display_path(&backup)
+        ));
+        bail!("migration failed: {e}");
+    }
+
+    let target: usize = migrations
+        .current_version(&conn)
+        .map_err(|e| anyhow!("{e}"))?
+        .into();
+    drop(conn);
+    std::fs::remove_file(&backup).context("remove backup after success")?;
+    style::success(format!("migrated to version {target}"));
     Ok(())
 }
 

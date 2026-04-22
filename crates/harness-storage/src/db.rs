@@ -45,7 +45,7 @@ pub fn open(path: impl AsRef<Path>) -> Result<Database> {
     Database::open(path)
 }
 
-pub(crate) fn configure(conn: &mut Connection) -> Result<()> {
+pub fn configure(conn: &mut Connection) -> Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "busy_timeout", 5000i64)?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
