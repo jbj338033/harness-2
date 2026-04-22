@@ -1,7 +1,8 @@
-// IMPLEMENTS: D-148, D-161, D-169, D-170, D-177, D-318, D-430
+// IMPLEMENTS: D-148, D-161, D-169, D-170, D-177, D-312, D-318, D-430
 pub mod archive;
 pub mod compat;
 pub mod conversation_url;
+pub mod explanation;
 pub mod git_sidecar;
 mod keyring;
 pub mod retention;
