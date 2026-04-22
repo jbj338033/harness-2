@@ -1,8 +1,18 @@
-// IMPLEMENTS: D-150, D-162
+// IMPLEMENTS: D-150, D-162, D-195, D-239
 //! Three-tier cost cap. Defaults are $5 / session, $50 / day, $500 / global
 //! per D-150. D-162 adds a $2 safety margin: at 90% of any cap we soft-warn,
 //! at 100% (margin-adjusted) we hard-stop. Multi-session aggregation rolls
 //! up via the writer-actor (D-174) so caller code never reads partial state.
+//!
+//! See [`billing`] for the Harness-estimate ↔ provider-confirm reconciler
+//! that resolves the cost split-brain (D-195, D-239).
+
+pub mod billing;
+
+pub use billing::{
+    AuthoritySource, DEFAULT_POLL_INTERVAL, ESTIMATE_EARLY_WARN_RATIO, ReconcileLedger,
+    ReconcileVerdict,
+};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
