@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-120, D-154, D-203, D-276, D-345, D-347
+// IMPLEMENTS: D-120, D-154, D-203, D-276, D-344, D-345, D-347
 //! Translation runtime. Built-in catalog covers ko/ja/en at launch and
 //! leaves zh/es/fr/de stubs that fall back to English until the human
 //! review lands (D-276). Lookups go through `t(locale, key, args)`. The
@@ -8,13 +8,21 @@
 //! [`bidi`] hosts the Trojan-Source-class control sanitizer the TUI uses
 //! before painting any model output (D-345). [`tokenizer`] provides the
 //! NFC + case-fold matcher behind the locale-aware skill registry (D-347).
+//! [`direction`], [`plural`], and [`number`] back the seven-responsibility
+//! contract from D-344 (the bits fluent-rs / ICU4X don't yet ship for us).
 
 pub mod bidi;
 pub mod catalog;
+pub mod direction;
+pub mod number;
+pub mod plural;
 pub mod tokenizer;
 
 pub use bidi::{BidiLine, contains_bidi_controls, sanitize_for_display};
 pub use catalog::{CategoryError, KeyCategory, all_keys, category_of, keys_in_category};
+pub use direction::{Direction, dir, dir_for_text};
+pub use number::{NumberFormat, format_for, format_i64, format_u64};
+pub use plural::{PluralCategory, cardinal};
 pub use tokenizer::{Lang, LocalizedSkill, fold, tokenize};
 
 use serde::{Deserialize, Serialize};
