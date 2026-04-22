@@ -12,3 +12,6 @@ description = "3-tier cost cap with safety margin, drift-tolerant ledger, and so
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

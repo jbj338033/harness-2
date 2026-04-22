@@ -1,18 +1,24 @@
-// IMPLEMENTS: D-150, D-162, D-195, D-239
+// IMPLEMENTS: D-150, D-162, D-166, D-174, D-195, D-239
 //! Three-tier cost cap. Defaults are $5 / session, $50 / day, $500 / global
 //! per D-150. D-162 adds a $2 safety margin: at 90% of any cap we soft-warn,
 //! at 100% (margin-adjusted) we hard-stop. Multi-session aggregation rolls
 //! up via the writer-actor (D-174) so caller code never reads partial state.
 //!
 //! See [`billing`] for the Harness-estimate ↔ provider-confirm reconciler
-//! that resolves the cost split-brain (D-195, D-239).
+//! that resolves the cost split-brain (D-195, D-239), [`abort_marker`] for
+//! the atomic ledger-update + abort coupling (D-174), and [`repeat_detector`]
+//! for the same-action detector that resets on cost-cap resume (D-166).
 
+pub mod abort_marker;
 pub mod billing;
+pub mod repeat_detector;
 
+pub use abort_marker::{AbortMarker, AbortReason, UpdateOutcome, apply_charge_with_marker};
 pub use billing::{
     AuthoritySource, DEFAULT_POLL_INTERVAL, ESTIMATE_EARLY_WARN_RATIO, ReconcileLedger,
     ReconcileVerdict,
 };
+pub use repeat_detector::{RepeatDetector, RepeatVerdict};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
