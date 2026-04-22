@@ -1,0 +1,18 @@
+[package]
+name = "harness-education"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Education mode (axis off-default) — educator skill meta, Socratic ZPD hint scaler, COPPA under-13 gate, FSRS, ed25519 learner stream, provenance-over-detection, crisis escalation"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
