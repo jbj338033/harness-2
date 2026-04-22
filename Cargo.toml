@@ -43,6 +43,7 @@ members = [
     "crates/harness-xr",
     "crates/harness-legal",
     "crates/harness-medical",
+    "crates/harness-finance",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
