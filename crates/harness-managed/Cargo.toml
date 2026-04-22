@@ -1,0 +1,15 @@
+[package]
+name = "harness-managed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Managed + scheduled agent primitive, a2a protocol envelope, windows appcontainer sandbox descriptor"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
