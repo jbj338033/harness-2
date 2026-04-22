@@ -20,6 +20,7 @@ harness-lifecycle = { path = "../harness-lifecycle" }
 harness-auth = { path = "../harness-auth" }
 harness-proto = { path = "../harness-proto" }
 harness-proto-adapters = { path = "../harness-proto-adapters" }
+harness-skills = { path = "../harness-skills" }
 harness-transport = { path = "../harness-transport" }
 
 tokio = { workspace = true, features = ["full"] }

@@ -1,7 +1,9 @@
+// IMPLEMENTS: D-158, D-204
 mod activate;
 mod catalog;
 mod discover;
 mod parse;
+pub mod skills_sh;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -10,6 +12,7 @@ pub use activate::{Activation, activate};
 pub use catalog::Catalog;
 pub use discover::{DiscoveryConfig, discover};
 pub use parse::{ParseError, parse_skill_md};
+pub use skills_sh::{ImportError, ImportReport, ParsedScript, import_from_dir, render_skill_md};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skill {

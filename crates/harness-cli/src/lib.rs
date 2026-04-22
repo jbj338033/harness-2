@@ -177,12 +177,22 @@ pub enum ModelCmd {
     },
 }
 
+// IMPLEMENTS: D-158, D-204
 #[derive(Subcommand, Debug)]
 pub enum SkillCmd {
     #[command(visible_alias = "ls")]
     List,
     Get {
         name: String,
+    },
+    /// import skills.sh-format scripts as Harness SKILL.md
+    Add {
+        /// directory of `*.sh` scripts to import
+        #[arg(long, value_name = "DIR")]
+        from_skills_sh: std::path::PathBuf,
+        /// destination — defaults to ~/.harness/skills
+        #[arg(long, value_name = "DIR")]
+        dest: Option<std::path::PathBuf>,
     },
 }
 
@@ -1463,6 +1473,33 @@ async fn cmd_skill(cmd: SkillCmd) -> Result<()> {
             }
             println!();
             println!("{body}");
+            Ok(())
+        }
+        SkillCmd::Add {
+            from_skills_sh,
+            dest,
+        } => {
+            let target = match dest {
+                Some(p) => p,
+                None => {
+                    let home = std::env::var_os("HOME")
+                        .map(std::path::PathBuf::from)
+                        .ok_or_else(|| anyhow!("HOME unset; pass --dest"))?;
+                    home.join(".harness").join("skills")
+                }
+            };
+            let report = harness_skills::import_from_dir(&from_skills_sh, &target)
+                .map_err(|e| anyhow!("{e}"))?;
+            style::section(&format!("Imported skills.sh → {}", display_path(&target)));
+            println!();
+            style::kv("written", report.written.len(), 10);
+            style::kv("skipped", report.skipped.len(), 10);
+            for path in &report.written {
+                style::success(format!("+ {}", display_path(path)));
+            }
+            for (path, why) in &report.skipped {
+                style::hint(format!("- {} ({})", display_path(path), why));
+            }
             Ok(())
         }
     }
