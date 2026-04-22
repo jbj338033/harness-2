@@ -6,6 +6,7 @@ pub mod db;
 pub mod migrations;
 pub mod reader;
 pub mod reader_pool;
+pub mod workspace_trust;
 pub mod writer;
 
 pub use db::{Database, open, open_in_memory};

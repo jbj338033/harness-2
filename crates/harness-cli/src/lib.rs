@@ -107,6 +107,11 @@ pub enum Command {
         #[command(subcommand)]
         cmd: DeviceCmd,
     },
+    /// manage workspace trust grants
+    Workspace {
+        #[command(subcommand)]
+        cmd: WorkspaceCmd,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -194,6 +199,20 @@ pub enum DeviceCmd {
     Remove { id: String },
 }
 
+// IMPLEMENTS: D-205
+#[derive(Subcommand, Debug)]
+pub enum WorkspaceCmd {
+    /// grant trust for a directory (defaults to cwd)
+    Trust { path: Option<std::path::PathBuf> },
+    /// revoke trust for a directory (defaults to cwd)
+    Untrust { path: Option<std::path::PathBuf> },
+    /// show trust state for a directory (defaults to cwd)
+    Status { path: Option<std::path::PathBuf> },
+    /// list every trusted directory
+    #[command(visible_alias = "ls")]
+    List,
+}
+
 #[must_use]
 pub fn parse() -> Cli {
     Cli::parse()
@@ -221,6 +240,7 @@ pub async fn run(cli: Cli) -> Result<()> {
         Command::Skill { cmd } => cmd_skill(cmd).await,
         Command::Mcp { cmd } => cmd_mcp(cmd).await,
         Command::Device { cmd } => cmd_device(cmd).await,
+        Command::Workspace { cmd } => cmd_workspace(cmd).await,
     }
 }
 
@@ -272,6 +292,8 @@ async fn cmd_init() -> Result<()> {
         println!();
     }
 
+    prompt_workspace_trust(&theme, &dd, &writer).await?;
+
     let pair_now = Confirm::with_theme(&theme)
         .with_prompt("Pair a remote device?")
         .default(false)
@@ -291,6 +313,49 @@ async fn cmd_init() -> Result<()> {
         }
     }
     Ok(())
+}
+
+// IMPLEMENTS: D-205
+async fn prompt_workspace_trust(
+    theme: &dialoguer::theme::ColorfulTheme,
+    dd: &DataDir,
+    writer: &WriterHandle,
+) -> Result<()> {
+    let cwd = std::env::current_dir().context("read current directory")?;
+    let canonical = harness_storage::workspace_trust::canonicalize(&cwd);
+    let display = display_path(&canonical);
+    let reader = rusqlite::Connection::open(dd.db_path()).context("open reader")?;
+    if harness_storage::workspace_trust::is_trusted(&reader, &canonical)
+        .map_err(|e| anyhow!("{e}"))?
+    {
+        style::info(format!("workspace already trusted: {display}"));
+        return Ok(());
+    }
+    drop(reader);
+    let trust_now = Confirm::with_theme(theme)
+        .with_prompt(format!(
+            "Trust this workspace ({display})? Untrusted dirs cannot load AGENTS.md / CLAUDE.md / SKILL.md"
+        ))
+        .default(false)
+        .interact()?;
+    if trust_now {
+        harness_storage::workspace_trust::trust(writer, canonical)
+            .await
+            .map_err(|e| anyhow!("{e}"))?;
+        style::success(format!("trusted {display}"));
+    } else {
+        style::hint("run `harness workspace trust` later to grant trust");
+    }
+    Ok(())
+}
+
+fn display_path(path: &std::path::Path) -> String {
+    let raw = path.display().to_string();
+    let home = std::env::var("HOME").unwrap_or_default();
+    if !home.is_empty() {
+        return raw.replacen(&home, "~", 1);
+    }
+    raw
 }
 
 struct PairingCodeInfo {
@@ -881,6 +946,65 @@ async fn cmd_device(cmd: DeviceCmd) -> Result<()> {
             } else {
                 bail!("no device with that id");
             }
+        }
+    }
+    Ok(())
+}
+
+// IMPLEMENTS: D-205
+async fn cmd_workspace(cmd: WorkspaceCmd) -> Result<()> {
+    let (dd, _db, writer) = open_db()?;
+    let reader = rusqlite::Connection::open(dd.db_path())?;
+    match cmd {
+        WorkspaceCmd::Trust { path } => {
+            let target = path.map_or_else(std::env::current_dir, Ok)?;
+            let canonical = harness_storage::workspace_trust::canonicalize(&target);
+            harness_storage::workspace_trust::trust(&writer, canonical.clone())
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+            style::success(format!("trusted {}", display_path(&canonical)));
+        }
+        WorkspaceCmd::Untrust { path } => {
+            let target = path.map_or_else(std::env::current_dir, Ok)?;
+            let canonical = harness_storage::workspace_trust::canonicalize(&target);
+            let removed = harness_storage::workspace_trust::untrust(&writer, canonical.clone())
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+            if removed {
+                style::success(format!("revoked {}", display_path(&canonical)));
+            } else {
+                bail!("not in the trust list: {}", display_path(&canonical));
+            }
+        }
+        WorkspaceCmd::Status { path } => {
+            let target = path.map_or_else(std::env::current_dir, Ok)?;
+            let canonical = harness_storage::workspace_trust::canonicalize(&target);
+            style::section(&format!("workspace {}", display_path(&canonical)));
+            println!();
+            let trusted = harness_storage::workspace_trust::is_trusted(&reader, &canonical)
+                .map_err(|e| anyhow!("{e}"))?;
+            style::kv("trusted", if trusted { "yes" } else { "no" }, 12);
+        }
+        WorkspaceCmd::List => {
+            let entries =
+                harness_storage::workspace_trust::list(&reader).map_err(|e| anyhow!("{e}"))?;
+            if entries.is_empty() {
+                style::info("no trusted workspaces");
+                style::hint("run `harness workspace trust` in a directory to grant trust");
+                return Ok(());
+            }
+            style::section("Trusted workspaces");
+            println!();
+            let rows: Vec<Vec<String>> = entries
+                .iter()
+                .map(|e| {
+                    vec![
+                        display_path(std::path::Path::new(&e.path)),
+                        if e.trusted { "yes".into() } else { "no".into() },
+                    ]
+                })
+                .collect();
+            table::print(&["Path", "Trusted"], &rows);
         }
     }
     Ok(())

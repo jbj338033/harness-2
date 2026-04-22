@@ -7,6 +7,7 @@ pub fn all() -> Migrations<'static> {
         M::up(INITIAL_SCHEMA),
         M::up(MESSAGES_FTS),
         M::up(MESSAGES_KIND),
+        M::up(WORKSPACE_TRUST),
     ])
 }
 
@@ -132,6 +133,17 @@ ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat';
 CREATE INDEX idx_messages_kind ON messages(agent_id, kind);
 ";
 
+// IMPLEMENTS: D-205
+const WORKSPACE_TRUST: &str = r"
+-- Per-directory trust grants. Untrusted workspaces refuse to load
+-- AGENTS.md / CLAUDE.md / SKILL.md until the user opts in.
+CREATE TABLE workspaces (
+    path        TEXT PRIMARY KEY,    -- canonical absolute path
+    trusted     INTEGER NOT NULL,    -- 0 | 1
+    trusted_at  INTEGER NOT NULL     -- ms epoch when the row was last written
+) STRICT;
+";
+
 const MESSAGES_FTS: &str = r"
 CREATE VIRTUAL TABLE messages_fts USING fts5(
     content,
@@ -172,7 +184,7 @@ mod tests {
         let version: i64 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3, "expected migration version 3");
+        assert_eq!(version, 4, "expected migration version 4");
 
         for t in [
             "config",
@@ -184,6 +196,7 @@ mod tests {
             "tool_calls",
             "memory",
             "approvals",
+            "workspaces",
         ] {
             let count: i64 = conn
                 .query_row(
