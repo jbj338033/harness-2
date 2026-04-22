@@ -1,5 +1,7 @@
-// IMPLEMENTS: D-161, D-318
+// IMPLEMENTS: D-161, D-318, D-430
+pub mod archive;
 pub mod git_sidecar;
+pub mod retention;
 
 use harness_auth::{PrivateKey, PublicKey, SignatureBytes, generate_keypair};
 use serde::{Deserialize, Serialize};
