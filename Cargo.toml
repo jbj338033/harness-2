@@ -63,6 +63,7 @@ members = [
     "crates/harness-business",
     "crates/harness-exit",
     "crates/harness-foundation",
+    "crates/harness-fs-safe",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
