@@ -1,0 +1,16 @@
+[package]
+name = "harness-exit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Harness export with agent-trace sidecar pin, lifecycle state + dead-man switch, slsa-l3 + 2-of-2 release signature, governance file registry, final migration release contract"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
