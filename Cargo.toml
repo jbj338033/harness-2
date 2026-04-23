@@ -64,6 +64,7 @@ members = [
     "crates/harness-exit",
     "crates/harness-foundation",
     "crates/harness-fs-safe",
+    "crates/harness-stewardship",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
