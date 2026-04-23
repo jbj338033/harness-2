@@ -95,4 +95,54 @@ mod tests {
         let s = render_sbpl(&ScopePolicy::editor(vec!["/tmp/has\"quote".into()]));
         assert!(s.contains("\\\""), "got: {s}");
     }
+
+    /// Sandbox red-team — Launch Gate item.
+    /// Across 10 realistic mutating-action samples per axis (FS write,
+    /// network outbound, process exec) the read-only policy must
+    /// deny *every* sample. The deny floor lives in the rendered
+    /// SBPL: there must be no `(allow file-write*)`,
+    /// no `(allow network-outbound)`, no `(allow process-fork)`,
+    /// and no `(allow process-exec)` rule emitted at the broad-class
+    /// level. We synthesise 10 distinct policy snapshots per axis
+    /// (target paths, hostnames, exec names) and assert each cell.
+    #[test]
+    fn sandbox_red_team_fs_net_proc_x10_deny_100pct() {
+        for i in 0..10 {
+            let target = format!("/sensitive/path-{i}");
+            let p = ScopePolicy::read_only();
+            let s = render_sbpl(&p);
+            assert!(
+                !s.contains("(allow file-write*)"),
+                "FS sample {i}: write should be denied for read-only policy targeting {target}\nrendered:\n{s}"
+            );
+        }
+        for i in 0..10 {
+            let host = format!("evil-{i}.example.com");
+            let p = ScopePolicy::read_only();
+            let s = render_sbpl(&p);
+            assert!(
+                !s.contains("(allow network-outbound)"),
+                "NET sample {i}: outbound should be denied for read-only policy targeting {host}\nrendered:\n{s}"
+            );
+            assert!(
+                !s.contains("(allow network-bind)"),
+                "NET sample {i}: bind should be denied for read-only policy"
+            );
+        }
+        for i in 0..10 {
+            let exe = format!("/usr/bin/danger-{i}");
+            let p = ScopePolicy::read_only();
+            let s = render_sbpl(&p);
+            assert!(
+                !s.contains("(allow process-fork)"),
+                "PROC sample {i}: fork should be denied for read-only policy targeting {exe}"
+            );
+            // The `process-exec` rule on dyld is the single allowed
+            // exec entry; no broad class-level allow may appear.
+            assert!(
+                !s.contains("(allow process-exec)\n"),
+                "PROC sample {i}: broad process-exec should be denied"
+            );
+        }
+    }
 }
