@@ -1,0 +1,15 @@
+[package]
+name = "harness-foundation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Branding terminology guard, provider health + 5-tier fallback, local inference fallback, gpai safety info parser, collapse-triggered trace export, liability readme 5-language pin, agent trace insurance export"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

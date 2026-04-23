@@ -62,6 +62,7 @@ members = [
     "crates/harness-team",
     "crates/harness-business",
     "crates/harness-exit",
+    "crates/harness-foundation",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
