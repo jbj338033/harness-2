@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-041
+// IMPLEMENTS: D-031, D-033, D-034, D-035, D-036, D-037, D-038, D-041, D-042, D-076, D-077
 use crate::{Result, WriterHandle};
 use harness_core::now;
 use rusqlite::{Connection, params};

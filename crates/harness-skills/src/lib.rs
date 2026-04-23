@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-158, D-204
+// IMPLEMENTS: D-158, D-204, D-293, D-294, D-295, D-296, D-297, D-298, D-299
 mod activate;
 mod catalog;
 mod discover;

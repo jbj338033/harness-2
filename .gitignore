@@ -20,3 +20,4 @@ Thumbs.db
 
 # Node (fallback)
 node_modules/
+.harness-design/

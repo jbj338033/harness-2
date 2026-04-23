@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-202, D-207, D-208
+// IMPLEMENTS: D-180, D-181, D-182, D-183, D-196, D-197, D-198, D-199, D-201, D-202, D-207, D-208
 mod auth_login;
 mod config_explain;
 mod daemon_rpc;

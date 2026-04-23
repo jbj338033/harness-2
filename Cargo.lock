@@ -1720,6 +1720,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-agi"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-auth"
 version = "0.1.0"
 dependencies = [
@@ -1744,6 +1754,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-autonomy"
+version = "0.1.0"
+dependencies = [
+ "harness-auth",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-bias"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-business"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-carbon"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-cli"
 version = "0.1.0"
 dependencies = [
@@ -1757,6 +1804,7 @@ dependencies = [
  "harness-lifecycle",
  "harness-proto",
  "harness-proto-adapters",
+ "harness-skills",
  "harness-storage",
  "harness-transport",
  "indicatif",
@@ -1787,6 +1835,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-control"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-core"
 version = "0.1.0"
 dependencies = [
@@ -1808,11 +1866,133 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-crisis"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-data"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-devops"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-distributed"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-education"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "ed25519-dalek",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-exit"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-finance"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-formal"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-foundation"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-fs-safe"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-government"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-hooks"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-i18n"
 version = "0.1.0"
 dependencies = [
  "serde",
  "unicode-normalization",
+]
+
+[[package]]
+name = "harness-legal"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -1954,6 +2134,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-managed"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-marketplace"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-mcp"
 version = "0.1.0"
 dependencies = [
@@ -1970,6 +2169,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-medical"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-memory"
 version = "0.1.0"
 dependencies = [
@@ -1982,6 +2190,17 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "harness-multimodal"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -2002,6 +2221,34 @@ dependencies = [
  "blake3",
  "harness-mcp",
  "serde",
+]
+
+[[package]]
+name = "harness-remote-runtime"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-rights"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-robotics"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -2054,6 +2301,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-self-analysis"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-session"
 version = "0.1.0"
 dependencies = [
@@ -2071,6 +2327,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-settings"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-shred"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-skills"
 version = "0.1.0"
 dependencies = [
@@ -2080,6 +2356,15 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "harness-stewardship"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -2099,6 +2384,42 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "harness-supply"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-surface"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-taint"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-team"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -2323,6 +2644,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-typestate"
+version = "0.1.0"
+dependencies = [
+ "harness-cost",
+ "proptest",
+ "serde",
+]
+
+[[package]]
+name = "harness-validation"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-verify"
 version = "0.1.0"
 dependencies = [
@@ -2336,6 +2676,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-voice"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "harness-vulnerable"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "harness-worktree"
 version = "0.1.0"
 dependencies = [
@@ -2346,6 +2704,15 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "harness-xr"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

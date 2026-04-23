@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-155
+// IMPLEMENTS: D-155, D-317, D-319, D-320, D-321
 //! A2A (Agent-to-Agent) protocol envelope. Two directions:
 //!  * `Outbound` — the local Main delegates to a foreign agent.
 //!  * `Inbound` — Harness exposes itself as an A2A server.

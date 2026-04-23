@@ -1,4 +1,4 @@
-// IMPLEMENTS: D-187, D-327
+// IMPLEMENTS: D-187, D-326, D-327, D-328, D-329, D-330, D-332, D-333, D-334, D-335, D-336
 pub mod delegation;
 
 pub use delegation::{DelegationError, DelegationScope, PrincipalId, SummonBody, validate_summon};
