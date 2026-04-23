@@ -1,0 +1,16 @@
+[package]
+name = "harness-marketplace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Plugin marketplace — WasmExt registry entry, semver, capability-grant manifest, install verdict"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }

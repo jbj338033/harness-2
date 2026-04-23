@@ -69,6 +69,7 @@ members = [
     "crates/harness-self-analysis",
     "crates/harness-remote-runtime",
     "crates/harness-shred",
+    "crates/harness-marketplace",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
