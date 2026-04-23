@@ -58,6 +58,7 @@ members = [
     "crates/harness-distributed",
     "crates/harness-managed",
     "crates/harness-validation",
+    "crates/harness-rights",
     "crates/harness-session",
     "crates/harness-agent",
     "crates/harness-worktree",
