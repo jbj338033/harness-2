@@ -31,7 +31,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-pemfile = "2"
 rcgen = "0.14"
 sha2 = "0.10"
-rand = "0.8"
+rand = "0.9"
 
 [dev-dependencies]
 harness-lifecycle = { path = "../harness-lifecycle" }
