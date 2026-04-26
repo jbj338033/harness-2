@@ -30,7 +30,7 @@ tower = "0.5"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-pemfile = "2"
 rcgen = "0.14"
-sha2 = "0.10"
+sha2 = "0.11"
 rand = "0.8"
 
 [dev-dependencies]
